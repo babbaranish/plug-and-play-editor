@@ -8,7 +8,12 @@ export const TocPlugin: Plugin = {
         editor.addToolbarButton(icons.listTree, 'Insert Table of Contents', () => {
             const headings = editor.editorArea.querySelectorAll('h1, h2, h3, h4, h5, h6');
             if (headings.length === 0) {
-                alert('No headings found to generate a Table of Contents.');
+                const toast = document.createElement('div');
+                toast.textContent = 'No headings found to generate a Table of Contents.';
+                toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;color:#f8fafc;padding:10px 20px;border-radius:8px;font-size:14px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.15);opacity:0;transition:opacity .3s';
+                document.body.appendChild(toast);
+                requestAnimationFrame(() => toast.style.opacity = '1');
+                setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
                 return;
             }
 
