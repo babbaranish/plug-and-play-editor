@@ -150,12 +150,13 @@ export class Editor {
         this.execCommand(command, value);
     }
 
-    public addToolbarButton(iconHtml: string, tooltip: string, onClick: () => void, command?: string) {
+    public addToolbarButton(iconHtml: string, tooltip: string, onClick: () => void, command?: string, target?: HTMLElement) {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'play-editor-btn';
         btn.title = tooltip;
         btn.setAttribute('aria-label', tooltip);
+        // iconHtml is a trusted SVG string from icons.ts, not user input
         btn.innerHTML = iconHtml;
         if (command) {
             btn.dataset.command = command;
@@ -164,7 +165,13 @@ export class Editor {
             e.preventDefault();
             onClick();
         });
-        this.toolbar.appendChild(btn);
+        // If inside a group dropdown, add label text after the icon
+        if (target && target.classList.contains('play-editor-group-dropdown')) {
+            const label = document.createElement('span');
+            label.textContent = tooltip;
+            btn.appendChild(label);
+        }
+        (target || this.toolbar).appendChild(btn);
         return btn;
     }
 
@@ -173,6 +180,109 @@ export class Editor {
         divider.className = 'play-editor-divider';
         divider.setAttribute('role', 'separator');
         this.toolbar.appendChild(divider);
+    }
+
+    /**
+     * Add a collapsible toolbar group that shows a dropdown of buttons on click.
+     * Returns the dropdown container — plugins append buttons to it.
+     * iconHtml is a trusted SVG string from icons.ts, not user input.
+     */
+    public addToolbarGroup(iconHtml: string, tooltip: string): HTMLDivElement {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'play-editor-toolbar-group';
+
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'play-editor-btn play-editor-group-trigger';
+        trigger.title = tooltip;
+        trigger.setAttribute('aria-label', tooltip);
+        trigger.setAttribute('aria-haspopup', 'true');
+        trigger.setAttribute('aria-expanded', 'false');
+        // iconHtml comes from our icons.ts module (hardcoded SVGs), not user input
+        const iconContainer = document.createElement('span');
+        iconContainer.innerHTML = iconHtml;
+        trigger.appendChild(iconContainer);
+        const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        chevron.setAttribute('class', 'play-editor-group-chevron');
+        chevron.setAttribute('width', '8');
+        chevron.setAttribute('height', '8');
+        chevron.setAttribute('viewBox', '0 0 24 24');
+        chevron.setAttribute('fill', 'none');
+        chevron.setAttribute('stroke', 'currentColor');
+        chevron.setAttribute('stroke-width', '2.5');
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M6 9l6 6 6-6');
+        chevron.appendChild(path);
+        trigger.appendChild(chevron);
+
+        const dropdown = document.createElement('div');
+        dropdown.className = 'play-editor-group-dropdown';
+        dropdown.setAttribute('role', 'group');
+        dropdown.setAttribute('aria-label', tooltip);
+
+        let isOpen = false;
+
+        const close = () => {
+            isOpen = false;
+            dropdown.style.display = 'none';
+            trigger.setAttribute('aria-expanded', 'false');
+            trigger.classList.remove('play-editor-btn-active');
+        };
+
+        const toggle = () => {
+            if (isOpen) {
+                close();
+            } else {
+                isOpen = true;
+                dropdown.style.display = 'flex';
+                trigger.setAttribute('aria-expanded', 'true');
+                trigger.classList.add('play-editor-btn-active');
+
+                // Position below the trigger
+                const triggerRect = trigger.getBoundingClientRect();
+                const containerRect = this.container.getBoundingClientRect();
+                const toolbarRect = this.toolbar.getBoundingClientRect();
+                let leftPos = triggerRect.left - containerRect.left;
+                // Clamp to container width
+                const ddWidth = dropdown.offsetWidth || 200;
+                if (leftPos + ddWidth > containerRect.width) {
+                    leftPos = containerRect.width - ddWidth - 8;
+                }
+                if (leftPos < 0) leftPos = 0;
+                dropdown.style.top = `${toolbarRect.bottom - containerRect.top}px`;
+                dropdown.style.left = `${leftPos}px`;
+            }
+        };
+
+        trigger.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggle();
+        });
+
+        // Close on outside click
+        const docHandler = (e: MouseEvent) => {
+            if (isOpen && !wrapper.contains(e.target as Node) && !dropdown.contains(e.target as Node)) {
+                close();
+            }
+        };
+        document.addEventListener('mousedown', docHandler);
+        this.cleanupFns.push(() => document.removeEventListener('mousedown', docHandler));
+
+        // Close when a button inside the dropdown is clicked
+        dropdown.addEventListener('click', (e) => {
+            const target = e.target as HTMLElement;
+            if (target.closest('.play-editor-btn')) {
+                setTimeout(close, 50);
+            }
+        });
+
+        wrapper.appendChild(trigger);
+        this.container.style.position = 'relative';
+        this.container.appendChild(dropdown);
+        this.toolbar.appendChild(wrapper);
+
+        return dropdown;
     }
 
     public getContent(): string {

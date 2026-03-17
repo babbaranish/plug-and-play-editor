@@ -17,7 +17,13 @@ import {
     CodeBlockPlugin,
     DateTimePlugin,
     EmojiPlugin,
-    TokensPlugin
+    TokensPlugin,
+    PasteCleanupPlugin,
+    FontSizePlugin,
+    SpacingPlugin,
+    ButtonBlockPlugin,
+    ImageResizePlugin,
+    PreviewPlugin
 } from './index';
 
 const editor = new Editor('#editor', [
@@ -38,7 +44,13 @@ const editor = new Editor('#editor', [
     CodeBlockPlugin,
     DateTimePlugin,
     EmojiPlugin,
-    TokensPlugin
+    TokensPlugin,
+    PasteCleanupPlugin,
+    FontSizePlugin,
+    SpacingPlugin,
+    ButtonBlockPlugin,
+    ImageResizePlugin,
+    PreviewPlugin
 ]);
 
 // Just for testing the public api

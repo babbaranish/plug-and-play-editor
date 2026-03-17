@@ -11,6 +11,8 @@ function escapeHtml(text: string): string {
 export const TocPlugin: Plugin = {
     name: 'toc',
     init(editor: Editor) {
+        // Join the "Insert Block" group created by PageBreakPlugin
+        const group = (editor as any)._insertGroup as HTMLDivElement | undefined;
         editor.addToolbarButton(icons.listTree, 'Insert Table of Contents', () => {
             const headings = editor.editorArea.querySelectorAll('h1, h2, h3, h4, h5, h6');
             if (headings.length === 0) {
@@ -38,7 +40,7 @@ export const TocPlugin: Plugin = {
 
             tocHtml += '</ul></div><p><br></p>';
 
-            editor.exec('insertHTML', tocHtml);
-        });
+            editor.execCommand('insertHTML', tocHtml);
+        }, undefined, group);
     }
 };

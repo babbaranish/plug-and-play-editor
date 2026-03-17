@@ -49,12 +49,12 @@
 
 /* ── Toolbar ───────────────────────────────────────────────────── */
 .play-editor-toolbar {
-    padding: 6px 10px;
+    padding: 4px 8px;
     background: var(--pe-toolbar-bg);
     border-bottom: 1px solid var(--pe-border);
     display: flex;
     flex-wrap: wrap;
-    gap: 2px;
+    gap: 1px;
     align-items: center;
 }
 
@@ -63,11 +63,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 34px;
-    height: 34px;
+    width: 30px;
+    height: 30px;
     padding: 0;
     border: none;
-    border-radius: 6px;
+    border-radius: 5px;
     background: transparent;
     color: var(--pe-text-muted);
     cursor: pointer;
@@ -76,8 +76,8 @@
 }
 
 .play-editor-btn svg {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     pointer-events: none;
 }
 
@@ -135,7 +135,7 @@
 }
 
 .play-editor-heading-select {
-    height: 34px;
+    height: 30px;
     padding: 0 8px;
     border: 1px solid var(--pe-border);
     border-radius: 6px;
@@ -161,9 +161,9 @@
 /* ── Divider ───────────────────────────────────────────────────── */
 .play-editor-divider {
     width: 1px;
-    height: 22px;
+    height: 18px;
     background: var(--pe-border);
-    margin: 0 4px;
+    margin: 0 3px;
     flex-shrink: 0;
 }
 
@@ -262,9 +262,9 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 34px;
-    height: 34px;
-    border-radius: 6px;
+    width: 30px;
+    height: 30px;
+    border-radius: 5px;
     cursor: pointer;
     border: none;
     transition: background .15s;
@@ -292,8 +292,8 @@
 }
 
 .play-editor-color-picker span svg {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
 }
 
 /* ── Media Wrapper ────────────────────────────────────────────── */
@@ -784,6 +784,320 @@
 .play-editor-mention-dropdown::-webkit-scrollbar-thumb {
     background: var(--pe-border);
     border-radius: 3px;
+}
+
+/* ── Toolbar Groups ──────────────────────────────────────────── */
+.play-editor-toolbar-group {
+    display: inline-flex;
+    position: relative;
+}
+
+.play-editor-group-trigger {
+    width: auto !important;
+    padding: 0 4px !important;
+    gap: 1px;
+}
+
+.play-editor-group-trigger span {
+    display: flex;
+    align-items: center;
+}
+
+.play-editor-group-chevron {
+    opacity: .5;
+    flex-shrink: 0;
+}
+
+.play-editor-group-dropdown {
+    display: none;
+    position: absolute;
+    z-index: 200;
+    flex-wrap: wrap;
+    gap: 1px;
+    padding: 6px;
+    background: var(--pe-bg);
+    border: 1px solid var(--pe-border);
+    border-radius: 10px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, .15), 0 8px 10px -6px rgba(0, 0, 0, .1);
+    animation: pe-fade-in .15s ease;
+    min-width: max-content;
+}
+
+.play-editor-group-dropdown .play-editor-btn {
+    width: auto;
+    padding: 6px 10px;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--pe-text);
+    white-space: nowrap;
+}
+
+.play-editor-group-dropdown .play-editor-btn::after {
+    display: none;
+}
+
+.play-editor-group-dropdown .play-editor-divider {
+    width: 100%;
+    height: 1px;
+    margin: 3px 0;
+}
+
+/* ── Font Size Select ────────────────────────────────────────── */
+.play-editor-fontsize-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--pe-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 6px center;
+    padding: 5px 22px 5px 8px;
+    border: 1px solid var(--pe-border);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--pe-text);
+    cursor: pointer;
+    outline: none;
+    min-width: 70px;
+    transition: border-color .15s;
+}
+
+.play-editor-fontsize-select:hover {
+    border-color: var(--pe-accent);
+}
+
+.play-editor-fontsize-select:focus {
+    border-color: var(--pe-accent);
+    box-shadow: 0 0 0 2px var(--pe-focus);
+}
+
+/* ── Spacing Dropdown ────────────────────────────────────────── */
+.play-editor-spacing-dropdown {
+    position: absolute;
+    z-index: 200;
+    width: 200px;
+    max-width: calc(100vw - 32px);
+    background: var(--pe-bg);
+    border: 1px solid var(--pe-border);
+    border-radius: 12px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, .15), 0 8px 10px -6px rgba(0, 0, 0, .1);
+    padding: 6px;
+    animation: pe-fade-in .15s ease;
+}
+
+.play-editor-spacing-header {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--pe-text-muted);
+    padding: 8px 10px 4px;
+}
+
+.play-editor-spacing-item {
+    padding: 7px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--pe-text);
+    transition: background .12s;
+}
+
+.play-editor-spacing-item:hover {
+    background: var(--pe-btn-hover);
+}
+
+/* ── Button Block ────────────────────────────────────────────── */
+.play-editor-button-block {
+    user-select: none;
+    cursor: pointer;
+    position: relative;
+}
+
+.play-editor-button-block:hover {
+    outline: 2px dashed var(--pe-accent);
+    outline-offset: 4px;
+    border-radius: 4px;
+}
+
+.play-editor-button-popup {
+    position: absolute;
+    z-index: 200;
+    width: 320px;
+    max-width: calc(100vw - 32px);
+    background: var(--pe-bg);
+    border: 1px solid var(--pe-border);
+    border-radius: 12px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, .15), 0 8px 10px -6px rgba(0, 0, 0, .1);
+    padding: 16px;
+    animation: pe-fade-in .15s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.play-editor-button-popup-label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--pe-text-muted);
+    flex: 1;
+}
+
+.play-editor-button-popup-input {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--pe-border);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--pe-text);
+    background: var(--pe-bg);
+    outline: none;
+    transition: border-color .15s;
+    box-sizing: border-box;
+}
+
+.play-editor-button-popup-input:focus {
+    border-color: var(--pe-accent);
+}
+
+.play-editor-button-popup-input-sm {
+    width: 100%;
+    min-width: 0;
+}
+
+.play-editor-button-popup-color {
+    width: 100%;
+    height: 32px;
+    border: 1px solid var(--pe-border);
+    border-radius: 6px;
+    cursor: pointer;
+    padding: 2px;
+}
+
+.play-editor-button-popup-row {
+    display: flex;
+    gap: 8px;
+}
+
+.play-editor-button-popup-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.play-editor-button-popup-submit {
+    flex: 1;
+    padding: 8px 16px;
+    background: var(--pe-accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity .15s;
+}
+
+.play-editor-button-popup-submit:hover {
+    opacity: .9;
+}
+
+.play-editor-button-popup-cancel {
+    padding: 8px 16px;
+    background: transparent;
+    color: var(--pe-text-muted);
+    border: 1px solid var(--pe-border);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background .15s;
+}
+
+.play-editor-button-popup-cancel:hover {
+    background: var(--pe-btn-hover);
+}
+
+/* ── Image Resize ────────────────────────────────────────────── */
+.play-editor-resize-overlay {
+    position: absolute;
+    border: 2px solid var(--pe-accent);
+    pointer-events: none;
+    z-index: 50;
+    box-sizing: border-box;
+}
+
+.play-editor-resize-handle {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: var(--pe-accent);
+    border: 2px solid white;
+    border-radius: 2px;
+    pointer-events: all;
+    z-index: 51;
+    box-sizing: border-box;
+}
+
+.play-editor-resize-handle-nw { top: -5px; left: -5px; cursor: nwse-resize; }
+.play-editor-resize-handle-ne { top: -5px; right: -5px; cursor: nesw-resize; }
+.play-editor-resize-handle-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
+.play-editor-resize-handle-se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+
+.play-editor-resize-info {
+    position: absolute;
+    bottom: -24px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    background: rgba(0, 0, 0, .7);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    pointer-events: none;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+/* ── Preview Mode ────────────────────────────────────────────── */
+.play-editor-preview-mode .play-editor-content {
+    max-width: 600px;
+    margin: 0 auto;
+    background: white;
+}
+
+.play-editor-preview-exit {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--pe-accent);
+    color: white;
+    border: none;
+    border-radius: 0 0 8px 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 13px;
+    transition: opacity .15s;
+}
+
+.play-editor-preview-exit:hover {
+    opacity: .9;
+}
+
+.play-editor-preview-exit svg {
+    width: 16px;
+    height: 16px;
+}
+
+.play-editor-token-preview {
+    background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+    color: #065f46;
+    border-color: #34d399;
 }
 
 /* ── Print Styles ─────────────────────────────────────────────── */

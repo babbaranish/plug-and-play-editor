@@ -6,6 +6,7 @@ export const CodeBlockPlugin: Plugin = {
     name: 'code-block',
     init(editor: Editor) {
         editor.addToolbarDivider();
+        const group = editor.addToolbarGroup(icons.code, 'Code');
 
         // Inline code
         editor.addToolbarButton(icons.code, 'Inline Code', () => {
@@ -38,7 +39,7 @@ export const CodeBlockPlugin: Plugin = {
             }
 
             editor.textArea.value = editor.editorArea.innerHTML;
-        });
+        }, undefined, group);
 
         // Code block
         editor.addToolbarButton(icons.braces, 'Code Block', () => {
@@ -49,8 +50,8 @@ export const CodeBlockPlugin: Plugin = {
                 <pre class="play-editor-code-block"><code>${escapeHtml(selected)}</code></pre>
                 <p><br></p>
             `;
-            editor.exec('insertHTML', html);
-        });
+            editor.execCommand('insertHTML', html);
+        }, undefined, group);
 
         // HTML Source View toggle
         let isSourceView = false;
@@ -69,7 +70,7 @@ export const CodeBlockPlugin: Plugin = {
                 sourceBtn.classList.remove('play-editor-btn-active');
                 editor.textArea.value = editor.editorArea.innerHTML;
             }
-        });
+        }, undefined, group);
     }
 };
 

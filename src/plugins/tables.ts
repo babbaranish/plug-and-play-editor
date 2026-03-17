@@ -22,6 +22,7 @@ export const TablesPlugin: Plugin = {
     name: 'tables',
     init(editor: Editor) {
         editor.addToolbarDivider();
+        const group = editor.addToolbarGroup(icons.table, 'Table');
 
         editor.addToolbarButton(icons.table, 'Insert 3x3 Table', () => {
             const rows = 3;
@@ -38,7 +39,7 @@ export const TablesPlugin: Plugin = {
             html += '</tbody></table><p><br></p>';
 
             editor.exec('insertHTML', html);
-        });
+        }, undefined, group);
 
         editor.addToolbarButton(icons.tableRowAdd, 'Add Row Below', () => {
             const selection = window.getSelection();
@@ -56,7 +57,7 @@ export const TablesPlugin: Plugin = {
             }
             tr.parentNode?.insertBefore(newTr, tr.nextSibling);
             editor.textArea.value = editor.editorArea.innerHTML;
-        });
+        }, undefined, group);
 
         editor.addToolbarButton(icons.tableColAdd, 'Add Column Right', () => {
             const selection = window.getSelection();
@@ -80,7 +81,7 @@ export const TablesPlugin: Plugin = {
                 }
             });
             editor.textArea.value = editor.editorArea.innerHTML;
-        });
+        }, undefined, group);
 
         editor.addToolbarButton(icons.tableRowDelete, 'Delete Row', () => {
             const selection = window.getSelection();
@@ -100,7 +101,7 @@ export const TablesPlugin: Plugin = {
                 tr.remove();
             }
             editor.textArea.value = editor.editorArea.innerHTML;
-        });
+        }, undefined, group);
 
         editor.addToolbarButton(icons.tableColDelete, 'Delete Column', () => {
             const selection = window.getSelection();
@@ -123,6 +124,6 @@ export const TablesPlugin: Plugin = {
                 });
             }
             editor.textArea.value = editor.editorArea.innerHTML;
-        });
+        }, undefined, group);
     }
 };

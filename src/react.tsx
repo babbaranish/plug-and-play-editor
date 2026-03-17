@@ -18,6 +18,12 @@ import { CodeBlockPlugin } from './plugins/code-block';
 import { DateTimePlugin } from './plugins/datetime';
 import { EmojiPlugin } from './plugins/emoji';
 import { TokensPlugin } from './plugins/tokens';
+import { PasteCleanupPlugin } from './plugins/paste-cleanup';
+import { FontSizePlugin } from './plugins/font-size';
+import { SpacingPlugin } from './plugins/spacing';
+import { ButtonBlockPlugin } from './plugins/button-block';
+import { ImageResizePlugin } from './plugins/image-resize';
+import { PreviewPlugin } from './plugins/preview';
 import './styles/core.css';
 
 /** All built-in plugins in their recommended order */
@@ -40,6 +46,12 @@ const ALL_PLUGINS: Plugin[] = [
     DateTimePlugin,
     EmojiPlugin,
     TokensPlugin,
+    PasteCleanupPlugin,
+    FontSizePlugin,
+    SpacingPlugin,
+    ButtonBlockPlugin,
+    ImageResizePlugin,
+    PreviewPlugin,
 ];
 
 export interface PlayEditorProps {

@@ -26,8 +26,14 @@ A modern, extensible rich text editor component for the web. Use it with vanilla
 | **Structure** | Accordion, Page break, Horizontal rule, Table of Contents |
 | **Date/Time** | Insert formatted date or time badges |
 | **Template Variables** | Insertable `{{token}}` placeholders for email templates, searchable picker, grouped by category, configurable delimiters |
+| **Font Size** | Dropdown with 12 preset sizes (10px–48px), applies as inline styles for email compatibility |
+| **Spacing** | Line height (1.0–2.5) and paragraph spacing (compact–double) controls |
+| **Button Block** | CTA button builder with text, URL, colors, radius, padding — email-client-compatible inline styles |
+| **Paste Cleanup** | Automatically strips Word/Google Docs junk on paste, Ctrl+Shift+V for plain text paste |
+| **Image Resize** | Click-to-select images with drag handles for proportional resizing |
+| **Preview Mode** | Toggle preview with token replacement (e.g. `{{first_name}}` → "Alice"), 600px email-width view |
 | **Editing** | Tab key inserts spaces (doesn't leave editor) |
-| **Keyboard Shortcuts** | Ctrl/Cmd+B (Bold), Ctrl/Cmd+I (Italic), Ctrl/Cmd+U (Underline), Ctrl/Cmd+Z (Undo), Ctrl/Cmd+Shift+Z / Ctrl/Cmd+Y (Redo) |
+| **Keyboard Shortcuts** | Ctrl/Cmd+B (Bold), Ctrl/Cmd+I (Italic), Ctrl/Cmd+U (Underline), Ctrl/Cmd+Z (Undo), Ctrl/Cmd+Shift+Z / Ctrl/Cmd+Y (Redo), Ctrl/Cmd+Shift+V (Paste Plain Text) |
 | **Accessibility** | ARIA roles & labels on toolbar, buttons, dropdowns; focus-visible outlines |
 | **Print** | Print-ready styles (toolbar hidden, clean layout) |
 | **Responsive** | Mobile-friendly emoji picker and toolbar |
@@ -93,7 +99,7 @@ function App() {
 }
 ```
 
-That's it — **all 18 plugins load automatically** in the React component (including the Tokens plugin with default email template variables).
+That's it — **all 24 plugins load automatically** in the React component (including email template features: tokens, button blocks, font size, spacing, paste cleanup, image resize, and preview mode).
 
 ---
 
@@ -122,6 +128,12 @@ import {
   DateTimePlugin,
   EmojiPlugin,
   TokensPlugin,
+  PasteCleanupPlugin,
+  FontSizePlugin,
+  SpacingPlugin,
+  ButtonBlockPlugin,
+  ImageResizePlugin,
+  PreviewPlugin,
 } from 'plug-and-play-editor';
 
 const editor = new Editor('#my-textarea', [
@@ -143,6 +155,12 @@ const editor = new Editor('#my-textarea', [
   DateTimePlugin,
   EmojiPlugin,
   TokensPlugin,
+  PasteCleanupPlugin,
+  FontSizePlugin,
+  SpacingPlugin,
+  ButtonBlockPlugin,
+  ImageResizePlugin,
+  PreviewPlugin,
 ]);
 ```
 
@@ -233,6 +251,12 @@ function LightEditor() {
 | **Date/Time** | `DateTimePlugin` | Insert current date or time as styled badge |
 | **Emoji** | `EmojiPlugin` | Tabbed emoji picker popup |
 | **Tokens** | `TokensPlugin` | Template variable picker with default email tokens (`{{first_name}}`, etc.) |
+| **Paste Cleanup** | `PasteCleanupPlugin` | Auto-cleans pasted HTML from Word/Docs, Ctrl+Shift+V for plain text |
+| **Font Size** | `FontSizePlugin` | Font size dropdown (10–48px) with inline style output |
+| **Spacing** | `SpacingPlugin` | Line height & paragraph spacing controls |
+| **Button Block** | `ButtonBlockPlugin` | CTA button builder with colors, padding, radius — click to re-edit |
+| **Image Resize** | `ImageResizePlugin` | Click images to show resize handles, drag to resize proportionally |
+| **Preview** | `PreviewPlugin` | Preview mode with token replacement and 600px email-width view |
 
 ### Configurable Plugins
 
@@ -308,6 +332,23 @@ The default `TokensPlugin` export includes common email template variables:
 | `{{current_year}}` | Current year |
 | `{{current_date}}` | Current date |
 
+#### Preview — Custom Sample Data
+
+```ts
+import { createPreviewPlugin } from 'plug-and-play-editor';
+
+const preview = createPreviewPlugin({
+  sampleData: {
+    first_name: 'John',
+    company: 'My Corp',
+    order_id: 'ORD-12345',
+    // Add any custom token keys your templates use
+  },
+});
+
+const editor = new Editor('#editor', [FormattingPlugin, TokensPlugin, preview]);
+```
+
 ---
 
 ## ⌨️ Keyboard Shortcuts
@@ -320,6 +361,7 @@ The default `TokensPlugin` export includes common email template variables:
 | `Ctrl/Cmd + Z` | Undo |
 | `Ctrl/Cmd + Shift + Z` | Redo |
 | `Ctrl/Cmd + Y` | Redo |
+| `Ctrl/Cmd + Shift + V` | Paste as plain text |
 | `Tab` | Insert tab space |
 
 ---
@@ -503,7 +545,13 @@ plug-and-play-editor/
 │   │   ├── code-block.ts   # Code blocks
 │   │   ├── datetime.ts     # Date/Time insert
 │   │   ├── emoji.ts        # Emoji picker (ARIA, scoped cleanup)
-│   │   └── tokens.ts       # Template variable tokens (configurable, searchable)
+│   │   ├── tokens.ts       # Template variable tokens (configurable, searchable)
+│   │   ├── paste-cleanup.ts # Paste cleanup (Word/Docs sanitization)
+│   │   ├── font-size.ts    # Font size dropdown (inline styles)
+│   │   ├── spacing.ts      # Line height & paragraph spacing
+│   │   ├── button-block.ts # CTA button builder (email-compatible)
+│   │   ├── image-resize.ts # Image resize handles
+│   │   └── preview.ts      # Preview mode with token replacement
 │   ├── styles/
 │   │   └── core.css        # All styles (responsive, print, a11y)
 │   ├── index.ts            # Vanilla JS entry

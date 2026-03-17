@@ -7,9 +7,12 @@ export const PageBreakPlugin: Plugin = {
     init(editor: Editor) {
         editor.addToolbarDivider();
 
+        // Create "Insert Block" group for structural elements
+        const group = editor.addToolbarGroup(icons.fileBreak, 'Insert Block');
+
         editor.addToolbarButton(icons.minus, 'Horizontal Rule', () => {
-            editor.exec('insertHorizontalRule');
-        });
+            editor.execCommand('insertHorizontalRule');
+        }, undefined, group);
 
         editor.addToolbarButton(icons.fileBreak, 'Page Break', () => {
             const html = `
@@ -18,7 +21,10 @@ export const PageBreakPlugin: Plugin = {
         </div>
         <p><br></p>
       `;
-            editor.exec('insertHTML', html);
-        });
+            editor.execCommand('insertHTML', html);
+        }, undefined, group);
+
+        // Expose group for other plugins to add to
+        (editor as any)._insertGroup = group;
     }
 };

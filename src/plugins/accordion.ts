@@ -5,6 +5,8 @@ import { icons } from '../core/icons';
 export const AccordionPlugin: Plugin = {
     name: 'accordion',
     init(editor: Editor) {
+        // Join the "Insert Block" group created by PageBreakPlugin
+        const group = (editor as any)._insertGroup as HTMLDivElement | undefined;
         editor.addToolbarButton(icons.chevronDown, 'Insert Accordion', () => {
             const html = `
         <details class="play-editor-accordion" open>
@@ -16,7 +18,7 @@ export const AccordionPlugin: Plugin = {
         <p><br></p>
       `;
 
-            editor.exec('insertHTML', html);
-        });
+            editor.execCommand('insertHTML', html);
+        }, undefined, group);
     }
 };
