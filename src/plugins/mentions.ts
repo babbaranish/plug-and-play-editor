@@ -18,6 +18,20 @@ export interface MentionsPluginOptions {
 const DEFAULT_USERS: MentionUser[] = [
 ];
 
+function escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function debounce<T extends (...args: never[]) => void>(fn: T, ms: number): T {
+    let timer: ReturnType<typeof setTimeout>;
+    return ((...args: Parameters<T>) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), ms);
+    }) as unknown as T;
+}
+
 export function createMentionsPlugin(options: MentionsPluginOptions = {}): Plugin {
     const trigger = options.trigger || '@';
     const usersSource = options.users || DEFAULT_USERS;
@@ -118,13 +132,18 @@ export function createMentionsPlugin(options: MentionsPluginOptions = {}): Plugi
                 removeDropdown();
 
                 let users: MentionUser[];
-                if (typeof usersSource === 'function') {
-                    const result = usersSource(query);
-                    users = result instanceof Promise ? await result : result;
-                } else {
-                    users = usersSource.filter(u =>
-                        u.name.toLowerCase().includes(query.toLowerCase())
-                    );
+                try {
+                    if (typeof usersSource === 'function') {
+                        const result = usersSource(query);
+                        users = result instanceof Promise ? await result : result;
+                    } else {
+                        users = usersSource.filter(u =>
+                            u.name.toLowerCase().includes(query.toLowerCase())
+                        );
+                    }
+                } catch {
+                    // Silently fail on fetch errors
+                    return;
                 }
 
                 if (users.length === 0) return;
@@ -134,18 +153,28 @@ export function createMentionsPlugin(options: MentionsPluginOptions = {}): Plugi
 
                 dropdown = document.createElement('div');
                 dropdown.className = 'play-editor-mention-dropdown';
+                dropdown.setAttribute('role', 'listbox');
+                dropdown.setAttribute('aria-label', 'Mention suggestions');
                 dropdown.style.top = `${coords.top + 4}px`;
                 dropdown.style.left = `${coords.left}px`;
 
                 users.slice(0, 8).forEach((user, idx) => {
                     const item = document.createElement('div');
                     item.className = 'play-editor-mention-item';
-                    if (idx === 0) item.classList.add('active');
+                    item.setAttribute('role', 'option');
+                    if (idx === 0) {
+                        item.classList.add('active');
+                        item.setAttribute('aria-selected', 'true');
+                    }
 
                     const initials = user.name.split(' ').map(n => n[0]).join('').toUpperCase();
+                    const avatarHtml = user.avatar
+                        ? `<img src="${escapeHtml(user.avatar)}" alt="" />`
+                        : escapeHtml(initials);
+
                     item.innerHTML = `
-                        <div class="play-editor-mention-avatar">${user.avatar ? `<img src="${user.avatar}" />` : initials}</div>
-                        <span class="play-editor-mention-name">${user.name}</span>
+                        <div class="play-editor-mention-avatar">${avatarHtml}</div>
+                        <span class="play-editor-mention-name">${escapeHtml(user.name)}</span>
                     `;
 
                     item.addEventListener('mousedown', (e) => {
@@ -159,6 +188,11 @@ export function createMentionsPlugin(options: MentionsPluginOptions = {}): Plugi
                 editor.editorArea.style.position = 'relative';
                 editor.editorArea.appendChild(dropdown);
             }
+
+            // Debounce input handling for async user fetching
+            const debouncedShowDropdown = debounce((query: string) => {
+                showDropdown(query);
+            }, typeof usersSource === 'function' ? 200 : 0);
 
             async function handleInput() {
                 const sel = window.getSelection();
@@ -194,14 +228,14 @@ export function createMentionsPlugin(options: MentionsPluginOptions = {}): Plugi
                     return;
                 }
 
-                await showDropdown(query);
+                debouncedShowDropdown(query);
             }
 
             // Listen for input events
             editor.editorArea.addEventListener('input', handleInput);
 
             // Keyboard navigation in dropdown
-            editor.editorArea.addEventListener('keydown', (e: KeyboardEvent) => {
+            const onKeydown = (e: KeyboardEvent) => {
                 if (!dropdown) return;
 
                 const items = dropdown.querySelectorAll('.play-editor-mention-item');
@@ -211,13 +245,17 @@ export function createMentionsPlugin(options: MentionsPluginOptions = {}): Plugi
                 if (e.key === 'ArrowDown') {
                     e.preventDefault();
                     active?.classList.remove('active');
+                    active?.removeAttribute('aria-selected');
                     activeIdx = (activeIdx + 1) % items.length;
                     items[activeIdx].classList.add('active');
+                    items[activeIdx].setAttribute('aria-selected', 'true');
                 } else if (e.key === 'ArrowUp') {
                     e.preventDefault();
                     active?.classList.remove('active');
+                    active?.removeAttribute('aria-selected');
                     activeIdx = (activeIdx - 1 + items.length) % items.length;
                     items[activeIdx].classList.add('active');
+                    items[activeIdx].setAttribute('aria-selected', 'true');
                 } else if (e.key === 'Enter' || e.key === 'Tab') {
                     if (active) {
                         e.preventDefault();
@@ -227,13 +265,23 @@ export function createMentionsPlugin(options: MentionsPluginOptions = {}): Plugi
                     e.preventDefault();
                     removeDropdown();
                 }
-            });
+            };
+            editor.editorArea.addEventListener('keydown', onKeydown);
 
-            // Close dropdown when clicking outside
-            document.addEventListener('click', (e) => {
+            // Close dropdown when clicking outside — scoped to editor
+            const onDocClick = (e: MouseEvent) => {
                 if (dropdown && !dropdown.contains(e.target as Node)) {
                     removeDropdown();
                 }
+            };
+            document.addEventListener('click', onDocClick);
+
+            // Cleanup on destroy
+            editor.onDestroy(() => {
+                removeDropdown();
+                editor.editorArea.removeEventListener('input', handleInput);
+                editor.editorArea.removeEventListener('keydown', onKeydown);
+                document.removeEventListener('click', onDocClick);
             });
         }
     };

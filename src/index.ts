@@ -1,6 +1,6 @@
 export { Editor } from './core/Editor';
 export type { Plugin } from './core/Plugin';
-export { FormattingPlugin } from './plugins/formatting';
+export { FormattingPlugin, UndoRedoPlugin } from './plugins/formatting';
 export { ListsPlugin } from './plugins/lists';
 export { ColorPlugin } from './plugins/color';
 export { LinksPlugin } from './plugins/links';
@@ -17,4 +17,6 @@ export type { MentionsPluginOptions } from './plugins/mentions';
 export { CodeBlockPlugin } from './plugins/code-block';
 export { DateTimePlugin } from './plugins/datetime';
 export { EmojiPlugin } from './plugins/emoji';
+export { TokensPlugin, createTokensPlugin, DEFAULT_EMAIL_TOKENS } from './plugins/tokens';
+export type { Token, TokensPluginOptions } from './plugins/tokens';
 import './styles/core.css';

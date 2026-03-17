@@ -1,6 +1,7 @@
 import {
     Editor,
     FormattingPlugin,
+    UndoRedoPlugin,
     ListsPlugin,
     ColorPlugin,
     LinksPlugin,
@@ -15,11 +16,13 @@ import {
     MentionsPlugin,
     CodeBlockPlugin,
     DateTimePlugin,
-    EmojiPlugin
+    EmojiPlugin,
+    TokensPlugin
 } from './index';
 
 const editor = new Editor('#editor', [
     FormattingPlugin,
+    UndoRedoPlugin,
     ListsPlugin,
     ColorPlugin,
     DirectionalityPlugin,
@@ -34,7 +37,8 @@ const editor = new Editor('#editor', [
     MentionsPlugin,
     CodeBlockPlugin,
     DateTimePlugin,
-    EmojiPlugin
+    EmojiPlugin,
+    TokensPlugin
 ]);
 
 // Just for testing the public api

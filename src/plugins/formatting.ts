@@ -7,18 +7,72 @@ export const FormattingPlugin: Plugin = {
     init(editor: Editor) {
         editor.addToolbarButton(icons.bold, 'Bold', () => {
             editor.exec('bold');
-        });
+        }, 'bold');
 
         editor.addToolbarButton(icons.italic, 'Italic', () => {
             editor.exec('italic');
-        });
+        }, 'italic');
 
         editor.addToolbarButton(icons.underline, 'Underline', () => {
             editor.exec('underline');
-        });
+        }, 'underline');
 
         editor.addToolbarButton(icons.strikethrough, 'Strikethrough', () => {
             editor.exec('strikeThrough');
+        }, 'strikeThrough');
+
+        // Headings dropdown
+        const wrapper = document.createElement('div');
+        wrapper.className = 'play-editor-select-wrapper';
+
+        const select = document.createElement('select');
+        select.className = 'play-editor-heading-select';
+        select.setAttribute('aria-label', 'Text style');
+        select.title = 'Text Style';
+
+        const options: [string, string][] = [
+            ['', 'Paragraph'],
+            ['h1', 'Heading 1'],
+            ['h2', 'Heading 2'],
+            ['h3', 'Heading 3'],
+            ['h4', 'Heading 4'],
+            ['h5', 'Heading 5'],
+            ['h6', 'Heading 6'],
+        ];
+
+        options.forEach(([value, label]) => {
+            const opt = document.createElement('option');
+            opt.value = value;
+            opt.textContent = label;
+            select.appendChild(opt);
+        });
+
+        select.addEventListener('change', () => {
+            const tag = select.value;
+            if (tag) {
+                editor.exec('formatBlock', `<${tag}>`);
+            } else {
+                editor.exec('formatBlock', '<p>');
+            }
+            select.value = '';
+        });
+
+        wrapper.appendChild(select);
+        editor.toolbar.appendChild(wrapper);
+    }
+};
+
+export const UndoRedoPlugin: Plugin = {
+    name: 'undo-redo',
+    init(editor: Editor) {
+        editor.addToolbarDivider();
+
+        editor.addToolbarButton(icons.undo, 'Undo', () => {
+            editor.exec('undo');
+        });
+
+        editor.addToolbarButton(icons.redo, 'Redo', () => {
+            editor.exec('redo');
         });
     }
 };

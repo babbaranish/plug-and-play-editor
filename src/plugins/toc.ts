@@ -2,6 +2,12 @@ import type { Plugin } from '../core/Plugin';
 import type { Editor } from '../core/Editor';
 import { icons } from '../core/icons';
 
+function escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 export const TocPlugin: Plugin = {
     name: 'toc',
     init(editor: Editor) {
@@ -20,13 +26,14 @@ export const TocPlugin: Plugin = {
             let tocHtml = '<div class="play-editor-toc" contenteditable="false"><h3>Table of Contents</h3><ul>';
 
             headings.forEach((heading, index) => {
-                const id = `toc-heading-${index}`;
+                const id = `toc-heading-${Date.now()}-${index}`;
                 heading.id = id;
 
                 const level = parseInt(heading.tagName.charAt(1));
                 const indent = (level - 1) * 20;
+                const text = escapeHtml(heading.textContent || '');
 
-                tocHtml += `<li style="margin-left: ${indent}px"><a href="#${id}">${heading.textContent}</a></li>`;
+                tocHtml += `<li style="margin-left: ${indent}px"><a href="#${id}">${text}</a></li>`;
             });
 
             tocHtml += '</ul></div><p><br></p>';

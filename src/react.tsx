@@ -1,7 +1,7 @@
 import { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import type { Plugin } from './core/Plugin';
 import { Editor } from './core/Editor';
-import { FormattingPlugin } from './plugins/formatting';
+import { FormattingPlugin, UndoRedoPlugin } from './plugins/formatting';
 import { ListsPlugin } from './plugins/lists';
 import { ColorPlugin } from './plugins/color';
 import { LinksPlugin } from './plugins/links';
@@ -17,11 +17,13 @@ import { MentionsPlugin } from './plugins/mentions';
 import { CodeBlockPlugin } from './plugins/code-block';
 import { DateTimePlugin } from './plugins/datetime';
 import { EmojiPlugin } from './plugins/emoji';
+import { TokensPlugin } from './plugins/tokens';
 import './styles/core.css';
 
 /** All built-in plugins in their recommended order */
 const ALL_PLUGINS: Plugin[] = [
     FormattingPlugin,
+    UndoRedoPlugin,
     ListsPlugin,
     ColorPlugin,
     DirectionalityPlugin,
@@ -37,6 +39,7 @@ const ALL_PLUGINS: Plugin[] = [
     CodeBlockPlugin,
     DateTimePlugin,
     EmojiPlugin,
+    TokensPlugin,
 ];
 
 export interface PlayEditorProps {
@@ -50,6 +53,10 @@ export interface PlayEditorProps {
     className?: string;
     /** Minimum height of the editor content area in px */
     minHeight?: number;
+    /** Disable the editor (non-editable, toolbar disabled) */
+    disabled?: boolean;
+    /** Make the editor read-only (content visible but not editable) */
+    readOnly?: boolean;
 }
 
 export interface PlayEditorRef {
@@ -62,7 +69,7 @@ export interface PlayEditorRef {
 }
 
 export const PlayEditor = forwardRef<PlayEditorRef, PlayEditorProps>(
-    ({ defaultValue = '', onChange, plugins, className, minHeight }, ref) => {
+    ({ defaultValue = '', onChange, plugins, className, minHeight, disabled, readOnly }, ref) => {
         const textareaRef = useRef<HTMLTextAreaElement>(null);
         const editorRef = useRef<Editor | null>(null);
 
@@ -91,7 +98,33 @@ export const PlayEditor = forwardRef<PlayEditorRef, PlayEditorProps>(
                     onChange(editor.getContent());
                 });
             }
+
+            // Cleanup on unmount
+            return () => {
+                editor.destroy();
+                editorRef.current = null;
+            };
         }, []);
+
+        // Handle disabled/readOnly changes
+        useEffect(() => {
+            const editor = editorRef.current;
+            if (!editor) return;
+
+            if (disabled) {
+                editor.editorArea.contentEditable = 'false';
+                editor.toolbar.querySelectorAll<HTMLButtonElement>('button, select, input').forEach(el => {
+                    el.disabled = true;
+                });
+                editor.container.classList.add('play-editor-disabled');
+            } else {
+                editor.editorArea.contentEditable = readOnly ? 'false' : 'true';
+                editor.toolbar.querySelectorAll<HTMLButtonElement>('button, select, input').forEach(el => {
+                    el.disabled = !!readOnly;
+                });
+                editor.container.classList.toggle('play-editor-disabled', !!readOnly);
+            }
+        }, [disabled, readOnly]);
 
         return (
             <div className={className}>

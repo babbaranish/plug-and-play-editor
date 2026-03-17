@@ -2,6 +2,22 @@ import type { Plugin } from '../core/Plugin';
 import type { Editor } from '../core/Editor';
 import { icons } from '../core/icons';
 
+function findAncestor(node: Node | null, editorArea: HTMLElement, tagName: string): HTMLElement | null {
+    while (node && node !== editorArea) {
+        if (node.nodeName === tagName) return node as HTMLElement;
+        node = node.parentNode;
+    }
+    return null;
+}
+
+function findCell(node: Node | null, editorArea: HTMLElement): HTMLTableCellElement | null {
+    while (node && node !== editorArea) {
+        if (node.nodeName === 'TD' || node.nodeName === 'TH') return node as HTMLTableCellElement;
+        node = node.parentNode;
+    }
+    return null;
+}
+
 export const TablesPlugin: Plugin = {
     name: 'tables',
     init(editor: Editor) {
@@ -28,50 +44,85 @@ export const TablesPlugin: Plugin = {
             const selection = window.getSelection();
             if (!selection || !selection.rangeCount) return;
 
-            let node: Node | null = selection.anchorNode;
-            while (node && node !== editor.editorArea && node.nodeName !== 'TR') {
-                node = node.parentNode;
-            }
+            const tr = findAncestor(selection.anchorNode, editor.editorArea, 'TR');
+            if (!tr) return;
 
-            if (node && node.nodeName === 'TR') {
-                const tr = node as HTMLTableRowElement;
-                const cols = tr.children.length;
-                const newTr = document.createElement('tr');
-                for (let i = 0; i < cols; i++) {
-                    const td = document.createElement('td');
-                    td.innerHTML = '<br>';
-                    newTr.appendChild(td);
-                }
-                tr.parentNode?.insertBefore(newTr, tr.nextSibling);
-                editor.textArea.value = editor.editorArea.innerHTML;
+            const cols = tr.children.length;
+            const newTr = document.createElement('tr');
+            for (let i = 0; i < cols; i++) {
+                const td = document.createElement('td');
+                td.innerHTML = '<br>';
+                newTr.appendChild(td);
             }
+            tr.parentNode?.insertBefore(newTr, tr.nextSibling);
+            editor.textArea.value = editor.editorArea.innerHTML;
         });
 
-        editor.addToolbarButton(icons.tableColAdd, 'Add Col Right', () => {
+        editor.addToolbarButton(icons.tableColAdd, 'Add Column Right', () => {
             const selection = window.getSelection();
             if (!selection || !selection.rangeCount) return;
 
-            let node: Node | null = selection.anchorNode;
-            while (node && node !== editor.editorArea && node.nodeName !== 'TD' && node.nodeName !== 'TH') {
-                node = node.parentNode;
-            }
+            const cell = findCell(selection.anchorNode, editor.editorArea);
+            if (!cell) return;
 
-            if (node && (node.nodeName === 'TD' || node.nodeName === 'TH')) {
-                const cell = node as HTMLTableCellElement;
-                const index = Array.from(cell.parentNode!.children).indexOf(cell);
-                const table = cell.closest('table');
+            const index = Array.from(cell.parentNode!.children).indexOf(cell);
+            const table = cell.closest('table');
+            if (!table) return;
 
-                if (table) {
-                    const rows = table.querySelectorAll('tr');
-                    rows.forEach(row => {
-                        const newCell = document.createElement(node!.nodeName);
-                        newCell.innerHTML = '<br>';
-                        const target = row.children[index];
-                        row.insertBefore(newCell, target.nextSibling);
-                    });
-                    editor.textArea.value = editor.editorArea.innerHTML;
+            table.querySelectorAll('tr').forEach(row => {
+                const newCell = document.createElement(row.children[index]?.nodeName === 'TH' ? 'th' : 'td');
+                newCell.innerHTML = '<br>';
+                const target = row.children[index];
+                if (target) {
+                    row.insertBefore(newCell, target.nextSibling);
+                } else {
+                    row.appendChild(newCell);
                 }
+            });
+            editor.textArea.value = editor.editorArea.innerHTML;
+        });
+
+        editor.addToolbarButton(icons.tableRowDelete, 'Delete Row', () => {
+            const selection = window.getSelection();
+            if (!selection || !selection.rangeCount) return;
+
+            const tr = findAncestor(selection.anchorNode, editor.editorArea, 'TR');
+            if (!tr) return;
+
+            const tbody = tr.parentNode;
+            if (!tbody) return;
+
+            // If this is the last row, remove the entire table
+            if (tbody.children.length <= 1) {
+                const table = tr.closest('table');
+                table?.remove();
+            } else {
+                tr.remove();
             }
+            editor.textArea.value = editor.editorArea.innerHTML;
+        });
+
+        editor.addToolbarButton(icons.tableColDelete, 'Delete Column', () => {
+            const selection = window.getSelection();
+            if (!selection || !selection.rangeCount) return;
+
+            const cell = findCell(selection.anchorNode, editor.editorArea);
+            if (!cell) return;
+
+            const index = Array.from(cell.parentNode!.children).indexOf(cell);
+            const table = cell.closest('table');
+            if (!table) return;
+
+            const rows = table.querySelectorAll('tr');
+            // If this is the last column, remove the entire table
+            if (rows[0] && rows[0].children.length <= 1) {
+                table.remove();
+            } else {
+                rows.forEach(row => {
+                    row.children[index]?.remove();
+                });
+            }
+            editor.textArea.value = editor.editorArea.innerHTML;
         });
     }
 };
