@@ -32,8 +32,13 @@ A modern, extensible rich text editor component for the web. Use it with vanilla
 | **Paste Cleanup** | Automatically strips Word/Google Docs junk on paste, Ctrl+Shift+V for plain text paste |
 | **Image Resize** | Click-to-select images with drag handles for proportional resizing |
 | **Preview Mode** | Toggle preview with token replacement (e.g. `{{first_name}}` → "Alice"), 600px email-width view |
+| **Source Code** | Toggle HTML source code editing mode with syntax-friendly monospace view |
+| **Font Family** | Dropdown with 11 font families (Arial, Georgia, Times New Roman, Courier New, etc.) |
+| **Block Quote** | Toggle blockquote formatting with active state tracking |
+| **Find & Replace** | Search with live highlighting, match counter, Find Next, Replace, Replace All — Ctrl/Cmd+F shortcut |
+| **Word Count** | Live word & character count in status bar, selection-aware counts |
 | **Editing** | Tab key inserts spaces (doesn't leave editor) |
-| **Keyboard Shortcuts** | Ctrl/Cmd+B (Bold), Ctrl/Cmd+I (Italic), Ctrl/Cmd+U (Underline), Ctrl/Cmd+Z (Undo), Ctrl/Cmd+Shift+Z / Ctrl/Cmd+Y (Redo), Ctrl/Cmd+Shift+V (Paste Plain Text) |
+| **Keyboard Shortcuts** | Ctrl/Cmd+B (Bold), Ctrl/Cmd+I (Italic), Ctrl/Cmd+U (Underline), Ctrl/Cmd+Z (Undo), Ctrl/Cmd+Shift+Z / Ctrl/Cmd+Y (Redo), Ctrl/Cmd+Shift+V (Paste Plain Text), Ctrl/Cmd+F (Find & Replace) |
 | **Accessibility** | ARIA roles & labels on toolbar, buttons, dropdowns; focus-visible outlines |
 | **Print** | Print-ready styles (toolbar hidden, clean layout) |
 | **Responsive** | Mobile-friendly emoji picker and toolbar |
@@ -99,7 +104,7 @@ function App() {
 }
 ```
 
-That's it — **all 24 plugins load automatically** in the React component (including email template features: tokens, button blocks, font size, spacing, paste cleanup, image resize, and preview mode).
+That's it — **all 29 plugins load automatically** in the React component (including email template features: tokens, button blocks, font size, spacing, paste cleanup, image resize, preview mode, source code editing, font family, block quote, find & replace, and word count).
 
 ---
 
@@ -134,6 +139,11 @@ import {
   ButtonBlockPlugin,
   ImageResizePlugin,
   PreviewPlugin,
+  SourceCodePlugin,
+  FontFamilyPlugin,
+  BlockQuotePlugin,
+  FindReplacePlugin,
+  WordCountPlugin,
 } from 'plug-and-play-editor';
 
 const editor = new Editor('#my-textarea', [
@@ -161,6 +171,11 @@ const editor = new Editor('#my-textarea', [
   ButtonBlockPlugin,
   ImageResizePlugin,
   PreviewPlugin,
+  SourceCodePlugin,
+  FontFamilyPlugin,
+  BlockQuotePlugin,
+  FindReplacePlugin,
+  WordCountPlugin,
 ]);
 ```
 
@@ -257,6 +272,11 @@ function LightEditor() {
 | **Button Block** | `ButtonBlockPlugin` | CTA button builder with colors, padding, radius — click to re-edit |
 | **Image Resize** | `ImageResizePlugin` | Click images to show resize handles, drag to resize proportionally |
 | **Preview** | `PreviewPlugin` | Preview mode with token replacement and 600px email-width view |
+| **Source Code** | `SourceCodePlugin` | Toggle raw HTML source code editing with monospace view, disables other toolbar controls in source mode |
+| **Font Family** | `FontFamilyPlugin` | Font family dropdown with 11 fonts (Arial, Georgia, Times New Roman, Courier New, etc.) |
+| **Block Quote** | `BlockQuotePlugin` | Toggle blockquote formatting with active state tracking |
+| **Find & Replace** | `FindReplacePlugin` | Search panel with live highlighting, match counter, Find Next, Replace, Replace All — Ctrl/Cmd+F shortcut |
+| **Word Count** | `WordCountPlugin` | Live word & character count status bar, shows selection-aware counts when text is selected |
 
 ### Configurable Plugins
 
@@ -362,6 +382,7 @@ const editor = new Editor('#editor', [FormattingPlugin, TokensPlugin, preview]);
 | `Ctrl/Cmd + Shift + Z` | Redo |
 | `Ctrl/Cmd + Y` | Redo |
 | `Ctrl/Cmd + Shift + V` | Paste as plain text |
+| `Ctrl/Cmd + F` | Find & Replace |
 | `Tab` | Insert tab space |
 
 ---
@@ -551,7 +572,12 @@ plug-and-play-editor/
 │   │   ├── spacing.ts      # Line height & paragraph spacing
 │   │   ├── button-block.ts # CTA button builder (email-compatible)
 │   │   ├── image-resize.ts # Image resize handles
-│   │   └── preview.ts      # Preview mode with token replacement
+│   │   ├── preview.ts      # Preview mode with token replacement
+│   │   ├── source-code.ts  # HTML source code editing toggle
+│   │   ├── font-family.ts  # Font family dropdown
+│   │   ├── block-quote.ts  # Blockquote formatting
+│   │   ├── find-replace.ts # Find & Replace panel
+│   │   └── word-count.ts   # Word & character count status bar
 │   ├── styles/
 │   │   └── core.css        # All styles (responsive, print, a11y)
 │   ├── index.ts            # Vanilla JS entry

@@ -24,6 +24,11 @@ import { SpacingPlugin } from './plugins/spacing';
 import { ButtonBlockPlugin } from './plugins/button-block';
 import { ImageResizePlugin } from './plugins/image-resize';
 import { PreviewPlugin } from './plugins/preview';
+import { SourceCodePlugin } from './plugins/source-code';
+import { FontFamilyPlugin } from './plugins/font-family';
+import { BlockQuotePlugin } from './plugins/block-quote';
+import { FindReplacePlugin } from './plugins/find-replace';
+import { WordCountPlugin } from './plugins/word-count';
 import './styles/core.css';
 
 /** All built-in plugins in their recommended order */
@@ -52,6 +57,11 @@ const ALL_PLUGINS: Plugin[] = [
     ButtonBlockPlugin,
     ImageResizePlugin,
     PreviewPlugin,
+    SourceCodePlugin,
+    FontFamilyPlugin,
+    BlockQuotePlugin,
+    FindReplacePlugin,
+    WordCountPlugin,
 ];
 
 export interface PlayEditorProps {

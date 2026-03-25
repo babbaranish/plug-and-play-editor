@@ -23,7 +23,12 @@ import {
     SpacingPlugin,
     ButtonBlockPlugin,
     ImageResizePlugin,
-    PreviewPlugin
+    PreviewPlugin,
+    SourceCodePlugin,
+    FontFamilyPlugin,
+    BlockQuotePlugin,
+    FindReplacePlugin,
+    WordCountPlugin
 } from './index';
 
 const editor = new Editor('#editor', [
@@ -50,7 +55,12 @@ const editor = new Editor('#editor', [
     SpacingPlugin,
     ButtonBlockPlugin,
     ImageResizePlugin,
-    PreviewPlugin
+    PreviewPlugin,
+    SourceCodePlugin,
+    FontFamilyPlugin,
+    BlockQuotePlugin,
+    FindReplacePlugin,
+    WordCountPlugin
 ]);
 
 // Just for testing the public api
