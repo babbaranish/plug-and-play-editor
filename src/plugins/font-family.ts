@@ -38,7 +38,23 @@ export const FontFamilyPlugin: Plugin = {
         select.addEventListener('change', () => {
             const family = select.value;
             if (!family) return;
-            editor.exec('fontName', family);
+
+            editor.editorArea.focus();
+
+            // Use fontName command as a sentinel, then replace <font> tags with <span style>
+            // This ensures the font-family is applied via inline style which has higher
+            // specificity than inherited CSS font-family on parent elements.
+            document.execCommand('fontName', false, '__pe_font_sentinel__');
+
+            const fonts = editor.editorArea.querySelectorAll('font[face="__pe_font_sentinel__"]');
+            fonts.forEach(font => {
+                const span = document.createElement('span');
+                span.style.fontFamily = family;
+                while (font.firstChild) span.appendChild(font.firstChild);
+                font.parentNode?.replaceChild(span, font);
+            });
+
+            editor.textArea.value = editor.editorArea.innerHTML;
             select.value = '';
         });
 
