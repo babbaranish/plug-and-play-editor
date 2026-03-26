@@ -1,7 +1,7 @@
 {
   "name": "plug-and-play-editor",
   "private": false,
-  "version": "0.4.0",
+  "version": "0.4.1",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
