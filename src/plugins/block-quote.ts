@@ -2,6 +2,14 @@ import type { Plugin } from '../core/Plugin';
 import type { Editor } from '../core/Editor';
 import { icons } from '../core/icons';
 
+function isInsideBlockquote(node: Node | null, stopAt: Node): boolean {
+    while (node && node !== stopAt) {
+        if ((node as HTMLElement).tagName === 'BLOCKQUOTE') return true;
+        node = node.parentNode;
+    }
+    return false;
+}
+
 export const BlockQuotePlugin: Plugin = {
     name: 'block-quote',
     init(editor: Editor) {
@@ -9,44 +17,31 @@ export const BlockQuotePlugin: Plugin = {
             const sel = window.getSelection();
             if (!sel || sel.rangeCount === 0) return;
 
-            // Check if already in blockquote
-            let node: Node | null = sel.anchorNode;
-            let inBlockquote = false;
-            while (node && node !== editor.editorArea) {
-                if (node instanceof HTMLElement && node.tagName === 'BLOCKQUOTE') {
-                    inBlockquote = true;
-                    break;
-                }
-                node = node.parentNode;
-            }
-
-            if (inBlockquote) {
-                editor.exec('formatBlock', '<p>');
+            if (isInsideBlockquote(sel.anchorNode, editor.editorArea)) {
+                editor.execCommand('formatBlock', '<p>');
             } else {
-                editor.exec('formatBlock', '<blockquote>');
+                editor.execCommand('formatBlock', '<blockquote>');
             }
         });
 
-        // Track active state via selectionchange
+        // Cache anchor + active state so unmoved selections skip the DOM walk
+        let lastAnchor: Node | null = null;
+        let lastActive = false;
+
         const updateActive = () => {
             const sel = window.getSelection();
-            if (!sel || sel.rangeCount === 0 || !editor.editorArea.contains(sel.anchorNode)) {
-                btn.classList.remove('play-editor-btn-active');
-                return;
-            }
-            let node: Node | null = sel.anchorNode;
-            let inBlockquote = false;
-            while (node && node !== editor.editorArea) {
-                if (node instanceof HTMLElement && node.tagName === 'BLOCKQUOTE') {
-                    inBlockquote = true;
-                    break;
-                }
-                node = node.parentNode;
-            }
+            if (!sel || sel.rangeCount === 0) return;
+            const anchor = sel.anchorNode;
+            if (anchor === lastAnchor) return;
+            lastAnchor = anchor;
+
+            const inBlockquote = isInsideBlockquote(anchor, editor.editorArea);
+            if (inBlockquote === lastActive) return;
+            lastActive = inBlockquote;
             btn.classList.toggle('play-editor-btn-active', inBlockquote);
         };
 
-        document.addEventListener('selectionchange', updateActive);
-        editor.onDestroy(() => document.removeEventListener('selectionchange', updateActive));
+        const unsub = editor.onSelectionChange(updateActive);
+        editor.onDestroy(unsub);
     }
 };

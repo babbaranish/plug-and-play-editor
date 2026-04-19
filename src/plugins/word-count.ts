@@ -9,7 +9,6 @@ export const WordCountPlugin: Plugin = {
         statusBar.setAttribute('aria-live', 'polite');
         statusBar.setAttribute('aria-label', 'Editor statistics');
 
-        // Inline styles
         statusBar.style.padding = '6px 16px';
         statusBar.style.borderTop = '1px solid var(--pe-border)';
         statusBar.style.background = 'var(--pe-toolbar-bg)';
@@ -23,9 +22,10 @@ export const WordCountPlugin: Plugin = {
 
         editor.container.appendChild(statusBar);
 
-        function getTextContent(): string {
-            return editor.editorArea.textContent || editor.editorArea.innerText || '';
-        }
+        // Memoize the last counted values so selection-only changes don't re-scan text
+        let cachedText = '';
+        let cachedWords = 0;
+        let cachedChars = 0;
 
         function countWords(text: string): number {
             const trimmed = text.trim();
@@ -33,8 +33,12 @@ export const WordCountPlugin: Plugin = {
             return trimmed.split(/\s+/).length;
         }
 
-        function countChars(text: string): number {
-            return text.length;
+        function refreshTextStats() {
+            const text = editor.editorArea.textContent || '';
+            if (text === cachedText) return;
+            cachedText = text;
+            cachedChars = text.length;
+            cachedWords = countWords(text);
         }
 
         function getSelectedText(): string {
@@ -44,38 +48,39 @@ export const WordCountPlugin: Plugin = {
             return sel.toString();
         }
 
-        function update() {
-            const text = getTextContent();
-            const words = countWords(text);
-            const chars = countChars(text);
-
+        function render() {
             const selectedText = getSelectedText();
-
-            if (selectedText && selectedText.length > 0) {
+            if (selectedText) {
                 const selWords = countWords(selectedText);
-                const selChars = countChars(selectedText);
-                statusBar.textContent = `${selWords} of ${words} words selected | ${selChars} of ${chars} characters selected`;
+                const selChars = selectedText.length;
+                statusBar.textContent = `${selWords} of ${cachedWords} words selected | ${selChars} of ${cachedChars} characters selected`;
             } else {
-                statusBar.textContent = `${words} words | ${chars} characters`;
+                statusBar.textContent = `${cachedWords} words | ${cachedChars} characters`;
             }
         }
 
-        const onInput = () => update();
-        editor.editorArea.addEventListener('input', onInput);
+        const onInput = () => {
+            refreshTextStats();
+            render();
+        };
 
         const onSelectionChange = () => {
-            if (!editor.editorArea.contains(document.activeElement)) return;
-            update();
+            // Text unchanged — only re-render with current selection. No textContent scan.
+            render();
         };
-        document.addEventListener('selectionchange', onSelectionChange);
+
+        // Use the editor's rAF-coalesced dispatchers (single selectionchange / input
+        // across all plugins) instead of adding our own document-level listener.
+        const unsubInput = editor.onInput(onInput);
+        const unsubSel = editor.onSelectionChange(onSelectionChange);
 
         // Initial count
-        update();
+        refreshTextStats();
+        render();
 
-        // Cleanup
         editor.onDestroy(() => {
-            editor.editorArea.removeEventListener('input', onInput);
-            document.removeEventListener('selectionchange', onSelectionChange);
+            unsubInput();
+            unsubSel();
             statusBar.remove();
         });
     }

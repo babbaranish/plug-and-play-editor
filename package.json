@@ -17,11 +17,20 @@
       "import": "./dist/react.mjs",
       "require": "./dist/react.cjs"
     },
+    "./react/defaults": {
+      "types": "./dist/react-defaults.d.ts",
+      "import": "./dist/react-defaults.mjs",
+      "require": "./dist/react-defaults.cjs"
+    },
     "./style.css": "./dist/plug-and-play-editor.css",
     "./dist/*": "./dist/*"
   },
   "files": [
     "dist"
+  ],
+  "sideEffects": [
+    "**/*.css",
+    "./dist/plug-and-play-editor.css"
   ],
   "scripts": {
     "dev": "vite",
@@ -47,8 +56,5 @@
     "typescript": "~5.9.3",
     "vite": "^7.3.1",
     "vite-plugin-dts": "^4.5.4"
-  },
-  "dependencies": {
-    "lucide": "^0.575.0"
   }
 }

@@ -1,75 +1,19 @@
 import { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import type { Plugin } from './core/Plugin';
 import { Editor } from './core/Editor';
-import { FormattingPlugin, UndoRedoPlugin } from './plugins/formatting';
-import { ListsPlugin } from './plugins/lists';
-import { ColorPlugin } from './plugins/color';
-import { LinksPlugin } from './plugins/links';
-import { MediaPlugin } from './plugins/media';
-import { DirectionalityPlugin } from './plugins/directionality';
-import { AlignmentPlugin } from './plugins/alignment';
-import { TablesPlugin } from './plugins/tables';
-import { AccordionPlugin } from './plugins/accordion';
-import { PageBreakPlugin } from './plugins/page-break';
-import { TocPlugin } from './plugins/toc';
-import { PasteImagePlugin } from './plugins/paste-image';
-import { MentionsPlugin } from './plugins/mentions';
-import { CodeBlockPlugin } from './plugins/code-block';
-import { DateTimePlugin } from './plugins/datetime';
-import { EmojiPlugin } from './plugins/emoji';
-import { TokensPlugin } from './plugins/tokens';
-import { PasteCleanupPlugin } from './plugins/paste-cleanup';
-import { FontSizePlugin } from './plugins/font-size';
-import { SpacingPlugin } from './plugins/spacing';
-import { ButtonBlockPlugin } from './plugins/button-block';
-import { ImageResizePlugin } from './plugins/image-resize';
-import { PreviewPlugin } from './plugins/preview';
-import { SourceCodePlugin } from './plugins/source-code';
-import { FontFamilyPlugin } from './plugins/font-family';
-import { BlockQuotePlugin } from './plugins/block-quote';
-import { FindReplacePlugin } from './plugins/find-replace';
-import { WordCountPlugin } from './plugins/word-count';
 import './styles/core.css';
 
-/** All built-in plugins in their recommended order */
-const ALL_PLUGINS: Plugin[] = [
-    FormattingPlugin,
-    UndoRedoPlugin,
-    ListsPlugin,
-    ColorPlugin,
-    DirectionalityPlugin,
-    AlignmentPlugin,
-    LinksPlugin,
-    MediaPlugin,
-    TablesPlugin,
-    AccordionPlugin,
-    PageBreakPlugin,
-    TocPlugin,
-    PasteImagePlugin,
-    MentionsPlugin,
-    CodeBlockPlugin,
-    DateTimePlugin,
-    EmojiPlugin,
-    TokensPlugin,
-    PasteCleanupPlugin,
-    FontSizePlugin,
-    SpacingPlugin,
-    ButtonBlockPlugin,
-    ImageResizePlugin,
-    PreviewPlugin,
-    SourceCodePlugin,
-    FontFamilyPlugin,
-    BlockQuotePlugin,
-    FindReplacePlugin,
-    WordCountPlugin,
-];
+// NOTE: The default set of plugins is loaded lazily via dynamic import so that
+// callers who pass their own `plugins` prop only bundle what they actually use.
+// Consumers who want the full set explicitly can `import { ALL_PLUGINS } from
+// 'plug-and-play-editor/react/defaults'`.
 
 export interface PlayEditorProps {
     /** Initial HTML content */
     defaultValue?: string;
     /** Called whenever the editor content changes */
     onChange?: (html: string) => void;
-    /** Custom plugins array. If not provided, all built-in plugins are loaded. */
+    /** Custom plugins array. If not provided, all built-in plugins are loaded lazily. */
     plugins?: Plugin[];
     /** Additional CSS class for the container wrapper */
     className?: string;
@@ -103,32 +47,42 @@ export const PlayEditor = forwardRef<PlayEditorRef, PlayEditorProps>(
 
         useEffect(() => {
             if (!textareaRef.current || editorRef.current) return;
+            const textarea = textareaRef.current;
+            let cancelled = false;
+            let inputHandler: (() => void) | null = null;
 
-            const editor = new Editor(
-                textareaRef.current,
-                plugins ?? ALL_PLUGINS
-            );
+            const initWith = (pluginList: Plugin[]) => {
+                if (cancelled || !textarea.parentNode) return;
+                const editor = new Editor(textarea, pluginList);
+                editorRef.current = editor;
 
-            editorRef.current = editor;
+                if (minHeight) {
+                    editor.editorArea.style.minHeight = `${minHeight}px`;
+                }
 
-            if (minHeight) {
-                editor.editorArea.style.minHeight = `${minHeight}px`;
+                if (onChange) {
+                    inputHandler = () => onChange(editor.getContent());
+                    editor.editorArea.addEventListener('input', inputHandler);
+                }
+            };
+
+            if (plugins) {
+                initWith(plugins);
+            } else {
+                import('./react-defaults').then((m) => initWith(m.ALL_PLUGINS));
             }
 
-            if (onChange) {
-                editor.editorArea.addEventListener('input', () => {
-                    onChange(editor.getContent());
-                });
-            }
-
-            // Cleanup on unmount
             return () => {
-                editor.destroy();
-                editorRef.current = null;
+                cancelled = true;
+                const editor = editorRef.current;
+                if (editor) {
+                    if (inputHandler) editor.editorArea.removeEventListener('input', inputHandler);
+                    editor.destroy();
+                    editorRef.current = null;
+                }
             };
         }, []);
 
-        // Handle disabled/readOnly changes
         useEffect(() => {
             const editor = editorRef.current;
             if (!editor) return;

@@ -7,6 +7,11 @@ export class Editor {
     public toolbar: HTMLDivElement;
     private plugins: Map<string, Plugin> = new Map();
     private cleanupFns: (() => void)[] = [];
+    private commandButtons: { btn: HTMLButtonElement; command: string }[] = [];
+    private selectionSubs: (() => void)[] = [];
+    private inputSubs: (() => void)[] = [];
+    private selectionFramePending = false;
+    private inputFramePending = false;
 
     constructor(selector: string | HTMLTextAreaElement, plugins: Plugin[] = []) {
         const el =
@@ -46,9 +51,16 @@ export class Editor {
         this.container.appendChild(this.toolbar);
         this.container.appendChild(this.editorArea);
 
-        // Sync content back to textarea on input
+        // Sync content back to textarea on input + dispatch rAF-coalesced subscribers
         const onInput = () => {
             this.textArea.value = this.editorArea.innerHTML;
+            if (this.inputSubs.length && !this.inputFramePending) {
+                this.inputFramePending = true;
+                requestAnimationFrame(() => {
+                    this.inputFramePending = false;
+                    for (const fn of this.inputSubs) fn();
+                });
+            }
         };
         this.editorArea.addEventListener('input', onInput);
         this.cleanupFns.push(() => this.editorArea.removeEventListener('input', onInput));
@@ -104,9 +116,18 @@ export class Editor {
         this.editorArea.addEventListener('keydown', onShortcut);
         this.cleanupFns.push(() => this.editorArea.removeEventListener('keydown', onShortcut));
 
-        // Update active button states on selection change
+        // Single rAF-coalesced selectionchange dispatcher shared across editor + plugins
         const onSelectionChange = () => {
-            this.updateActiveStates();
+            if (this.selectionFramePending) return;
+            this.selectionFramePending = true;
+            requestAnimationFrame(() => {
+                this.selectionFramePending = false;
+                const sel = window.getSelection();
+                const inEditor = !!(sel && sel.rangeCount > 0 && this.editorArea.contains(sel.anchorNode));
+                if (!inEditor) return;
+                this.updateActiveStates();
+                for (const fn of this.selectionSubs) fn();
+            });
         };
         document.addEventListener('selectionchange', onSelectionChange);
         this.cleanupFns.push(() => document.removeEventListener('selectionchange', onSelectionChange));
@@ -123,20 +144,17 @@ export class Editor {
     }
 
     private updateActiveStates() {
-        // Only update if our editor is focused
-        const sel = window.getSelection();
-        if (!sel || sel.rangeCount === 0) return;
-        if (!this.editorArea.contains(sel.anchorNode)) return;
-
-        this.toolbar.querySelectorAll<HTMLButtonElement>('.play-editor-btn[data-command]').forEach(btn => {
-            const command = btn.dataset.command!;
+        // Selection is already verified to be inside the editor by the dispatcher.
+        // Iterate the cached command-button list instead of re-querying the DOM.
+        for (let i = 0; i < this.commandButtons.length; i++) {
+            const { btn, command } = this.commandButtons[i];
             try {
                 const active = document.queryCommandState(command);
                 btn.classList.toggle('play-editor-btn-active', active);
             } catch {
                 // queryCommandState can throw for unsupported commands
             }
-        });
+        }
     }
 
     public execCommand(command: string, value: string | undefined = undefined) {
@@ -160,6 +178,7 @@ export class Editor {
         btn.innerHTML = iconHtml;
         if (command) {
             btn.dataset.command = command;
+            this.commandButtons.push({ btn, command });
         }
         btn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -297,6 +316,32 @@ export class Editor {
     /** Register a cleanup function to be called on destroy */
     public onDestroy(fn: () => void) {
         this.cleanupFns.push(fn);
+    }
+
+    /**
+     * Subscribe to selection changes inside the editor.
+     * Handler is invoked rAF-coalesced and only when the selection is inside the editor.
+     * Returns an unsubscribe function.
+     */
+    public onSelectionChange(fn: () => void): () => void {
+        this.selectionSubs.push(fn);
+        return () => {
+            const i = this.selectionSubs.indexOf(fn);
+            if (i !== -1) this.selectionSubs.splice(i, 1);
+        };
+    }
+
+    /**
+     * Subscribe to editor content input events.
+     * Handler is invoked rAF-coalesced after the textarea sync.
+     * Returns an unsubscribe function.
+     */
+    public onInput(fn: () => void): () => void {
+        this.inputSubs.push(fn);
+        return () => {
+            const i = this.inputSubs.indexOf(fn);
+            if (i !== -1) this.inputSubs.splice(i, 1);
+        };
     }
 
     /** Tear down the editor, remove DOM elements, and clean up all plugins */
