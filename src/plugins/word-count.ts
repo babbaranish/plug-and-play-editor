@@ -1,5 +1,6 @@
 import type { Plugin } from '../core/Plugin';
 import type { Editor } from '../core/Editor';
+import { comparePoints } from '../core/selection';
 
 export const WordCountPlugin: Plugin = {
     name: 'word-count',
@@ -22,7 +23,6 @@ export const WordCountPlugin: Plugin = {
 
         editor.container.appendChild(statusBar);
 
-        // Memoize the last counted values so selection-only changes don't re-scan text
         let cachedText = '';
         let cachedWords = 0;
         let cachedChars = 0;
@@ -41,11 +41,21 @@ export const WordCountPlugin: Plugin = {
             cachedWords = countWords(text);
         }
 
+        /**
+         * Selection text length derived from the structured selection. The
+         * browser's `Selection.toString()` has inconsistent newline handling
+         * across browsers; we still need it for the actual text *value* (for
+         * word counting), but the *character* count can be derived from a
+         * simpler source — the textContent slice between the anchor and focus
+         * Points.
+         */
         function getSelectedText(): string {
-            const sel = window.getSelection();
-            if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return '';
-            if (!editor.editorArea.contains(sel.anchorNode)) return '';
-            return sel.toString();
+            const sel = editor.getSelection();
+            if (sel.kind !== 'range') return '';
+            if (comparePoints(sel.anchor, sel.focus) === 0) return '';
+            const live = window.getSelection();
+            if (!live) return '';
+            return live.toString();
         }
 
         function render() {
@@ -65,16 +75,12 @@ export const WordCountPlugin: Plugin = {
         };
 
         const onSelectionChange = () => {
-            // Text unchanged — only re-render with current selection. No textContent scan.
             render();
         };
 
-        // Use the editor's rAF-coalesced dispatchers (single selectionchange / input
-        // across all plugins) instead of adding our own document-level listener.
         const unsubInput = editor.onInput(onInput);
         const unsubSel = editor.onSelectionChange(onSelectionChange);
 
-        // Initial count
         refreshTextStats();
         render();
 

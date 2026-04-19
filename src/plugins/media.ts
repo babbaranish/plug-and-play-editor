@@ -6,7 +6,13 @@ import { openFormModal, openInfoModal } from '../core/modal';
 function isValidImageUrl(url: string): boolean {
     try {
         const parsed = new URL(url);
-        return ['http:', 'https:', 'data:'].includes(parsed.protocol);
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return true;
+        if (parsed.protocol === 'data:') {
+            // Only accept data URLs that declare an image MIME type.
+            // Matches e.g. `data:image/png;base64,...` / `data:image/svg+xml,...`.
+            return /^data:image\//i.test(url);
+        }
+        return false;
     } catch {
         return false;
     }
@@ -32,6 +38,10 @@ function sanitizeEmbedCode(html: string): string | null {
     clean.src = src;
     clean.setAttribute('frameborder', '0');
     clean.setAttribute('allowfullscreen', '');
+    // Security hardening: isolate third-party embeds from the host page.
+    clean.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-presentation');
+    clean.setAttribute('referrerpolicy', 'no-referrer');
+    clean.setAttribute('loading', 'lazy');
     clean.style.maxWidth = '100%';
 
     const width = iframe.getAttribute('width');
@@ -117,6 +127,17 @@ export const MediaPlugin: Plugin = {
         fileInput.addEventListener('change', () => {
             const file = fileInput.files?.[0];
             if (!file) return;
+
+            // Defence-in-depth: the `accept="image/*"` attribute is a UI hint, not a
+            // validation — users can still select any file through platform file pickers.
+            if (!file.type.startsWith('image/')) {
+                openInfoModal(editor, {
+                    title: 'Upload Failed',
+                    message: `Only image files are supported (got: ${file.type || 'unknown'}).`
+                });
+                fileInput.value = '';
+                return;
+            }
 
             if (file.size > 10 * 1024 * 1024) {
                 openInfoModal(editor, {

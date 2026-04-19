@@ -130,6 +130,33 @@ function buildShell(editor: Editor, title: string): {
     return { backdrop, dialog, body, footer, errorBox };
 }
 
+/**
+ * Per-editor registry of currently-open modals so `editor.destroy()` can
+ * tear them down. Uses a WeakMap keyed on the editor so GC can reclaim
+ * entries when an editor is dropped.
+ */
+const openModals: WeakMap<Editor, Set<() => void>> = new WeakMap();
+
+function registerForDestroy(editor: Editor, close: () => void): void {
+    let set = openModals.get(editor);
+    if (!set) {
+        set = new Set();
+        openModals.set(editor, set);
+        // First modal on this editor — hook into its destroy lifecycle.
+        editor.onDestroy(() => {
+            const live = openModals.get(editor);
+            if (!live) return;
+            // Snapshot so `close()` callbacks can mutate the set without
+            // disrupting iteration.
+            const snapshot = Array.from(live);
+            live.clear();
+            for (const fn of snapshot) fn();
+            openModals.delete(editor);
+        });
+    }
+    set.add(close);
+}
+
 function mountModal(
     editor: Editor,
     backdrop: HTMLDivElement,
@@ -143,6 +170,7 @@ function mountModal(
         closed = true;
         document.removeEventListener('keydown', onKey);
         backdrop.remove();
+        openModals.get(editor)?.delete(close);
         onClose();
     };
 
@@ -168,6 +196,7 @@ function mountModal(
     document.addEventListener('keydown', onKey);
 
     editor.container.appendChild(backdrop);
+    registerForDestroy(editor, close);
 
     return { close, root: backdrop };
 }

@@ -1,7 +1,7 @@
 {
   "name": "plug-and-play-editor",
   "private": false,
-  "version": "0.5.1",
+  "version": "0.6.0",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
@@ -35,7 +35,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "peerDependencies": {
     "react": ">=17.0.0",

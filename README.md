@@ -478,6 +478,62 @@ The editor ships with its own CSS that loads automatically. You can customize it
 
 ---
 
+## 🏛️ Advanced Architecture
+
+The editor ships with three layered subsystems on top of the contentEditable DOM — opt in when you need them. They are structured, path-based, and DOM-independent, giving you a principled way to observe and mutate content without touching the live tree directly.
+
+### Selection model
+
+Structured, path-based selection that survives DOM churn. `editor.getSelection()` returns a discriminated union (`caret` / `range` / `none`) you can pattern-match on:
+
+```ts
+const sel = editor.getSelection();
+if (sel.kind === 'caret') {
+  console.log('caret at', sel.point.path, sel.point.offset);
+} else if (sel.kind === 'range') {
+  console.log('range', sel.anchor, '→', sel.focus);
+}
+```
+
+`editor.setSelection(sel)` writes the selection back to the DOM, and `editor.resolvePoint(node, offset)` converts a DOM position into a structured `Point`.
+
+### Document model
+
+A full Node ADT (`Doc` / `Paragraph` / `Heading` / `Text` / `Link` / `List` / …), schema validation, HTML ↔ Doc conversion, and a diffing reconciler. The model runs *alongside* the DOM — the DOM remains the source of truth, the `Doc` is an observable projection you can snapshot or re-render.
+
+```ts
+import { parseDom, serializeToHtml } from 'plug-and-play-editor';
+
+const doc = parseDom(editor.editorArea);
+for (const block of doc.children) {
+  console.log(block.type, 'children:', block.children?.length ?? 0);
+}
+const html = serializeToHtml(doc);
+```
+
+`serializeToDom(doc)` and `render(container, prev, next)` round out the pipeline for headless mutation and diffed re-rendering.
+
+### Transform system
+
+A 14-variant `Transform` ADT (Insert / Delete / Replace / SetAttr / AddMark / RemoveMark / Move / Split / Join / Wrap / Unwrap / ReplaceNode) with pure `apply()` + `invert()`, a `TransformLog` that tracks an undo/redo cursor with subscribers, and a MutationObserver-based `startRecording` that auto-captures every edit as a Transform.
+
+```ts
+import { TransformLog, startRecording, apply, parseDom } from 'plug-and-play-editor';
+
+const log = new TransformLog();
+const stop = startRecording(editor.editorArea, log);
+// ... user types ...
+log.stepUndo();                            // walk back one transform
+const next = apply(parseDom(editor.editorArea), someTransform);
+stop();
+```
+
+Each log entry is round-trippable (`invert` gives you the inverse transform), so undo/redo is derived rather than reconstructed from snapshots.
+
+Full design rationale lives in `docs/specs/2026-04-19-custom-selection-model-design.md`.
+
+---
+
 ## 📐 API Reference
 
 ### `Editor` Class
@@ -490,11 +546,14 @@ const editor = new Editor(selector: string | HTMLTextAreaElement, plugins: Plugi
 |--------|---------|-------------|
 | `getContent()` | `string` | Get the current HTML content |
 | `setContent(html)` | `void` | Set the editor HTML content |
-| `exec(command, value?)` | `void` | Run a `document.execCommand` |
+| `execCommand(command, value?)` | `void` | Run a `document.execCommand` |
 | `addToolbarButton(iconHtml, tooltip, onClick, command?)` | `HTMLButtonElement` | Add a custom toolbar button. Pass `command` to enable active state tracking. |
 | `addToolbarDivider()` | `void` | Add a visual divider to the toolbar |
 | `onSelectionChange(fn)` | `() => void` | Subscribe to selection changes inside the editor. Handler fires at most once per frame (rAF-coalesced) and only when the selection is inside the editor. Returns an unsubscribe function. |
 | `onInput(fn)` | `() => void` | Subscribe to editor input changes. Handler fires at most once per frame, after the backing textarea is synced. Returns an unsubscribe function. |
+| `getSelection()` | `Selection` | Read the current selection as a structured, path-based value (`caret` / `range` / `none`). DOM-independent. |
+| `setSelection(sel)` | `void` | Write a structured `Selection` back to the DOM. |
+| `resolvePoint(node, offset)` | `Point \| null` | Resolve a DOM `(node, offset)` pair into a structured `Point`, or `null` if the position is outside the editor. |
 | `onDestroy(fn)` | `void` | Register a cleanup function called on `destroy()` |
 | `destroy()` | `void` | Tear down the editor, clean up plugins and event listeners, restore the textarea |
 
@@ -546,7 +605,7 @@ export const MyPlugin: Plugin = {
       '<svg>...</svg>',   // icon HTML (SVG recommended)
       'My Action',         // tooltip (also used as aria-label)
       () => {
-        editor.exec('insertHTML', '<strong>Hello!</strong>');
+        editor.execCommand('insertHTML', '<strong>Hello!</strong>');
       },
       'bold'               // optional: command name for active state tracking
     );
@@ -681,6 +740,18 @@ plug-and-play-editor/
 ├── vite.config.ts
 └── tsconfig.json
 ```
+
+---
+
+## 🧪 Testing
+
+Unit tests live alongside their sources as `*.test.ts` and run under [vitest](https://vitest.dev/) with the happy-dom environment:
+
+```bash
+npm test
+```
+
+Coverage spans selection path math, document schema validation, parser/serializer round-trip, and transform `apply` + `invert` correctness — the building blocks behind the Advanced Architecture section above.
 
 ---
 
