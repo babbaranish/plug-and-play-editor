@@ -26,7 +26,8 @@
     "./dist/*": "./dist/*"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
   ],
   "sideEffects": [
     "**/*.css",
