@@ -1,6 +1,7 @@
 import type { Plugin } from '../core/Plugin';
 import type { Editor } from '../core/Editor';
 import { icons } from '../core/icons';
+import { openFormModal, openInfoModal } from '../core/modal';
 
 function isValidImageUrl(url: string): boolean {
     try {
@@ -17,7 +18,6 @@ function sanitizeEmbedCode(html: string): string | null {
     const iframe = doc.querySelector('iframe');
     if (!iframe) return null;
 
-    // Only allow safe iframe attributes
     const src = iframe.getAttribute('src');
     if (!src) return null;
 
@@ -28,7 +28,6 @@ function sanitizeEmbedCode(html: string): string | null {
         return null;
     }
 
-    // Build a clean iframe
     const clean = document.createElement('iframe');
     clean.src = src;
     clean.setAttribute('frameborder', '0');
@@ -54,23 +53,50 @@ export const MediaPlugin: Plugin = {
     init(editor: Editor) {
         editor.addToolbarDivider();
 
-        // Insert Image via URL
         editor.addToolbarButton(icons.image, 'Insert Image (URL)', () => {
-            const url = prompt('Enter image URL:', 'https://');
-            if (!url) return;
+            const sel = window.getSelection();
+            const savedRange = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
 
-            if (!isValidImageUrl(url)) {
-                alert('Invalid image URL.');
-                return;
-            }
+            openFormModal(editor, {
+                title: 'Insert Image',
+                fields: [
+                    {
+                        name: 'url',
+                        label: 'Image URL',
+                        type: 'url',
+                        value: 'https://',
+                        placeholder: 'https://example.com/image.png'
+                    }
+                ],
+                submitLabel: 'Insert',
+                onSubmit: (values, { showError, close }) => {
+                    const url = values.url.trim();
+                    if (!url) {
+                        showError('Image URL is required.');
+                        return;
+                    }
+                    if (!isValidImageUrl(url)) {
+                        showError('Invalid image URL. Only http, https, and data URLs are allowed.');
+                        return;
+                    }
 
-            editor.exec('insertImage', url);
+                    if (savedRange) {
+                        const s = window.getSelection();
+                        s?.removeAllRanges();
+                        s?.addRange(savedRange);
+                    }
+                    editor.editorArea.focus();
+                    editor.execCommand('insertImage', url);
 
-            const images = editor.editorArea.querySelectorAll('img');
-            images.forEach(img => {
-                if (!img.style.maxWidth) {
-                    img.style.maxWidth = '100%';
-                    img.style.height = 'auto';
+                    const images = editor.editorArea.querySelectorAll('img');
+                    images.forEach(img => {
+                        if (!img.style.maxWidth) {
+                            img.style.maxWidth = '100%';
+                            img.style.height = 'auto';
+                        }
+                    });
+
+                    close();
                 }
             });
         });
@@ -82,7 +108,6 @@ export const MediaPlugin: Plugin = {
         fileInput.style.display = 'none';
         editor.container.appendChild(fileInput);
 
-        // Clean up file input on editor destroy
         editor.onDestroy(() => fileInput.remove());
 
         editor.addToolbarButton(icons.imageUpload, 'Upload Image', () => {
@@ -93,9 +118,11 @@ export const MediaPlugin: Plugin = {
             const file = fileInput.files?.[0];
             if (!file) return;
 
-            // Validate file size (10MB max)
             if (file.size > 10 * 1024 * 1024) {
-                alert('Image too large. Maximum size is 10MB.');
+                openInfoModal(editor, {
+                    title: 'Upload Failed',
+                    message: 'Image too large. Maximum size is 10MB.'
+                });
                 fileInput.value = '';
                 return;
             }
@@ -129,25 +156,55 @@ export const MediaPlugin: Plugin = {
                 }
             };
             reader.onerror = () => {
-                alert('Failed to read the image file.');
+                openInfoModal(editor, {
+                    title: 'Upload Failed',
+                    message: 'Failed to read the image file.'
+                });
             };
             reader.readAsDataURL(file);
 
-            // Reset so the same file can be re-selected
             fileInput.value = '';
         });
 
-        // Insert Video/Embed — sanitized
         editor.addToolbarButton(icons.video, 'Insert Video/Media', () => {
-            const embedCode = prompt('Enter iframe embed code:', '<iframe src="..."></iframe>');
-            if (!embedCode) return;
+            const sel = window.getSelection();
+            const savedRange = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
 
-            const sanitized = sanitizeEmbedCode(embedCode);
-            if (!sanitized) {
-                alert('Invalid embed code. Only iframes with http/https sources are allowed.');
-                return;
-            }
-            editor.exec('insertHTML', sanitized);
+            openFormModal(editor, {
+                title: 'Insert Video / Embed',
+                fields: [
+                    {
+                        name: 'embed',
+                        label: 'Iframe embed code',
+                        type: 'textarea',
+                        value: '',
+                        placeholder: '<iframe src="https://..." width="560" height="315"></iframe>'
+                    }
+                ],
+                submitLabel: 'Insert',
+                onSubmit: (values, { showError, close }) => {
+                    const embedCode = values.embed.trim();
+                    if (!embedCode) {
+                        showError('Embed code is required.');
+                        return;
+                    }
+                    const sanitized = sanitizeEmbedCode(embedCode);
+                    if (!sanitized) {
+                        showError('Invalid embed code. Only iframes with http/https sources are allowed.');
+                        return;
+                    }
+
+                    if (savedRange) {
+                        const s = window.getSelection();
+                        s?.removeAllRanges();
+                        s?.addRange(savedRange);
+                    }
+                    editor.editorArea.focus();
+                    editor.execCommand('insertHTML', sanitized);
+
+                    close();
+                }
+            });
         });
     }
 };

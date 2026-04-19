@@ -30,6 +30,7 @@ import {
     FindReplacePlugin,
     WordCountPlugin
 } from './index';
+import { openInfoModal } from './core/modal';
 
 const editor = new Editor('#editor', [
     FormattingPlugin,
@@ -65,6 +66,20 @@ const editor = new Editor('#editor', [
 
 // Just for testing the public api
 document.getElementById('get-content')?.addEventListener('click', () => {
-    console.log(editor.getContent());
-    alert(editor.getContent());
+    const content = editor.getContent();
+    console.log(content);
+    openInfoModal(editor, {
+        title: 'Editor Content',
+        content,
+        preformatted: true,
+        closeLabel: 'Close',
+        theme: {
+            submit: {
+                background: '#10b981',
+                color: '#ffffff',
+                fontFamily: 'Georgia, serif',
+                fontWeight: '600'
+            }
+        }
+    });
 });

@@ -1,6 +1,7 @@
 import type { Plugin } from '../core/Plugin';
 import type { Editor } from '../core/Editor';
 import { icons } from '../core/icons';
+import { openFormModal } from '../core/modal';
 
 function isValidUrl(url: string): boolean {
     try {
@@ -25,6 +26,16 @@ interface ButtonConfig {
     paddingH: number;
 }
 
+const DEFAULT_CONFIG: ButtonConfig = {
+    text: 'Click Here',
+    url: 'https://',
+    bgColor: '#3b82f6',
+    textColor: '#ffffff',
+    borderRadius: 4,
+    paddingV: 12,
+    paddingH: 24
+};
+
 function generateButtonHtml(cfg: ButtonConfig): string {
     const safeText = escapeAttr(cfg.text);
     const safeUrl = escapeAttr(cfg.url);
@@ -37,19 +48,82 @@ function generateButtonHtml(cfg: ButtonConfig): string {
         `${safeText}</a></div>`;
 }
 
+function rgbToHex(input: string): string {
+    if (!input) return '';
+    if (input.startsWith('#')) return input;
+    const m = input.match(/\d+/g);
+    if (!m || m.length < 3) return input;
+    const toHex = (n: number) => n.toString(16).padStart(2, '0');
+    return '#' + toHex(parseInt(m[0])) + toHex(parseInt(m[1])) + toHex(parseInt(m[2]));
+}
+
 function parseButtonBlock(el: HTMLElement): ButtonConfig {
     const a = el.querySelector('a');
-    if (!a) return { text: 'Click Here', url: 'https://', bgColor: '#3b82f6', textColor: '#ffffff', borderRadius: 4, paddingV: 12, paddingH: 24 };
+    if (!a) return { ...DEFAULT_CONFIG };
     const s = a.style;
     return {
-        text: a.textContent || 'Click Here',
-        url: a.getAttribute('href') || 'https://',
-        bgColor: s.backgroundColor || '#3b82f6',
-        textColor: s.color || '#ffffff',
-        borderRadius: parseInt(s.borderRadius) || 4,
-        paddingV: parseInt(s.paddingTop || s.padding) || 12,
-        paddingH: parseInt(s.paddingLeft || s.padding) || 24,
+        text: a.textContent || DEFAULT_CONFIG.text,
+        url: a.getAttribute('href') || DEFAULT_CONFIG.url,
+        bgColor: rgbToHex(s.backgroundColor) || DEFAULT_CONFIG.bgColor,
+        textColor: rgbToHex(s.color) || DEFAULT_CONFIG.textColor,
+        borderRadius: parseInt(s.borderRadius) || DEFAULT_CONFIG.borderRadius,
+        paddingV: parseInt(s.paddingTop || s.padding) || DEFAULT_CONFIG.paddingV,
+        paddingH: parseInt(s.paddingLeft || s.padding) || DEFAULT_CONFIG.paddingH
     };
+}
+
+function openButtonModal(editor: Editor, config: ButtonConfig, editingEl: HTMLElement | null, savedRange: Range | null) {
+    openFormModal(editor, {
+        title: editingEl ? 'Edit Button' : 'Insert Button',
+        submitLabel: editingEl ? 'Update Button' : 'Insert Button',
+        fields: [
+            { name: 'text', label: 'Button Text', type: 'text', value: config.text, placeholder: 'Click Here' },
+            { name: 'url', label: 'Button URL', type: 'url', value: config.url, placeholder: 'https://example.com' },
+            [
+                { name: 'bgColor', label: 'Background', type: 'color', value: config.bgColor },
+                { name: 'textColor', label: 'Text Color', type: 'color', value: config.textColor }
+            ],
+            [
+                { name: 'borderRadius', label: 'Radius', type: 'number', value: String(config.borderRadius), min: 0, max: 50 },
+                { name: 'paddingV', label: 'Padding V', type: 'number', value: String(config.paddingV), min: 0, max: 80 },
+                { name: 'paddingH', label: 'Padding H', type: 'number', value: String(config.paddingH), min: 0, max: 80 }
+            ]
+        ],
+        onSubmit: (values, { showError, close }) => {
+            const text = values.text.trim() || DEFAULT_CONFIG.text;
+            const url = values.url.trim();
+            if (!isValidUrl(url)) {
+                showError('Invalid URL. Only http, https, and mailto links are allowed.');
+                return;
+            }
+
+            const cfg: ButtonConfig = {
+                text,
+                url,
+                bgColor: values.bgColor || DEFAULT_CONFIG.bgColor,
+                textColor: values.textColor || DEFAULT_CONFIG.textColor,
+                borderRadius: parseInt(values.borderRadius) || DEFAULT_CONFIG.borderRadius,
+                paddingV: parseInt(values.paddingV) || DEFAULT_CONFIG.paddingV,
+                paddingH: parseInt(values.paddingH) || DEFAULT_CONFIG.paddingH
+            };
+
+            const html = generateButtonHtml(cfg);
+
+            if (editingEl) {
+                editingEl.outerHTML = html;
+            } else {
+                if (savedRange) {
+                    const s = window.getSelection();
+                    s?.removeAllRanges();
+                    s?.addRange(savedRange);
+                }
+                editor.editorArea.focus();
+                document.execCommand('insertHTML', false, html + '<p><br></p>');
+            }
+            editor.textArea.value = editor.editorArea.innerHTML;
+            close();
+        }
+    });
 }
 
 export const ButtonBlockPlugin: Plugin = {
@@ -57,184 +131,22 @@ export const ButtonBlockPlugin: Plugin = {
     init(editor: Editor) {
         editor.addToolbarDivider();
 
-        let popup: HTMLDivElement | null = null;
-        let docClickHandler: ((e: MouseEvent) => void) | null = null;
-        let editingEl: HTMLElement | null = null;
-
-        function closePopup() {
-            if (popup) { popup.remove(); popup = null; }
-            if (docClickHandler) { document.removeEventListener('mousedown', docClickHandler); docClickHandler = null; }
-            editingEl = null;
-        }
-
-        function openPopup(config: ButtonConfig, savedRange: Range | null) {
-            closePopup();
-
-            popup = document.createElement('div');
-            popup.className = 'play-editor-button-popup';
-
-            const btnRect = btnEl.getBoundingClientRect();
-            const containerRect = editor.container.getBoundingClientRect();
-            const toolbarRect = editor.toolbar.getBoundingClientRect();
-            let leftPos = btnRect.left - containerRect.left;
-            const popupWidth = 320;
-            if (leftPos + popupWidth > containerRect.width) leftPos = containerRect.width - popupWidth - 8;
-            if (leftPos < 0) leftPos = 0;
-            popup.style.top = `${toolbarRect.bottom - containerRect.top}px`;
-            popup.style.left = `${leftPos}px`;
-
-            function field(label: string, type: string, value: string): HTMLInputElement {
-                const lbl = document.createElement('label');
-                lbl.className = 'play-editor-button-popup-label';
-                lbl.textContent = label;
-                const input = document.createElement('input');
-                input.type = type;
-                input.value = value;
-                input.className = type === 'color' ? 'play-editor-button-popup-color' : 'play-editor-button-popup-input';
-                lbl.appendChild(input);
-                popup!.appendChild(lbl);
-                return input;
-            }
-
-            const textInput = field('Button Text', 'text', config.text);
-            const urlInput = field('Button URL', 'url', config.url);
-
-            // Color row
-            const colorRow = document.createElement('div');
-            colorRow.className = 'play-editor-button-popup-row';
-
-            const bgLabel = document.createElement('label');
-            bgLabel.className = 'play-editor-button-popup-label';
-            bgLabel.textContent = 'Background';
-            const bgInput = document.createElement('input');
-            bgInput.type = 'color';
-            bgInput.value = config.bgColor;
-            bgInput.className = 'play-editor-button-popup-color';
-            bgLabel.appendChild(bgInput);
-
-            const txtLabel = document.createElement('label');
-            txtLabel.className = 'play-editor-button-popup-label';
-            txtLabel.textContent = 'Text Color';
-            const txtInput = document.createElement('input');
-            txtInput.type = 'color';
-            txtInput.value = config.textColor;
-            txtInput.className = 'play-editor-button-popup-color';
-            txtLabel.appendChild(txtInput);
-
-            colorRow.appendChild(bgLabel);
-            colorRow.appendChild(txtLabel);
-            popup.appendChild(colorRow);
-
-            // Size row
-            const sizeRow = document.createElement('div');
-            sizeRow.className = 'play-editor-button-popup-row';
-
-            function numField(parent: HTMLElement, label: string, value: number): HTMLInputElement {
-                const lbl = document.createElement('label');
-                lbl.className = 'play-editor-button-popup-label';
-                lbl.textContent = label;
-                const input = document.createElement('input');
-                input.type = 'number';
-                input.value = String(value);
-                input.min = '0';
-                input.max = '50';
-                input.className = 'play-editor-button-popup-input play-editor-button-popup-input-sm';
-                lbl.appendChild(input);
-                parent.appendChild(lbl);
-                return input;
-            }
-
-            const radInput = numField(sizeRow, 'Radius', config.borderRadius);
-            const padVInput = numField(sizeRow, 'Pad V', config.paddingV);
-            const padHInput = numField(sizeRow, 'Pad H', config.paddingH);
-            popup.appendChild(sizeRow);
-
-            // Actions
-            const actions = document.createElement('div');
-            actions.className = 'play-editor-button-popup-actions';
-
-            const insertBtn = document.createElement('button');
-            insertBtn.className = 'play-editor-button-popup-submit';
-            insertBtn.textContent = editingEl ? 'Update Button' : 'Insert Button';
-            insertBtn.addEventListener('mousedown', (e) => {
-                e.preventDefault();
-                const text = textInput.value.trim() || 'Click Here';
-                const url = urlInput.value.trim();
-                if (!isValidUrl(url)) { urlInput.style.borderColor = 'red'; return; }
-
-                const cfg: ButtonConfig = {
-                    text,
-                    url,
-                    bgColor: bgInput.value,
-                    textColor: txtInput.value,
-                    borderRadius: parseInt(radInput.value) || 4,
-                    paddingV: parseInt(padVInput.value) || 12,
-                    paddingH: parseInt(padHInput.value) || 24,
-                };
-
-                const html = generateButtonHtml(cfg);
-
-                if (editingEl) {
-                    editingEl.outerHTML = html;
-                } else {
-                    if (savedRange) {
-                        const s = window.getSelection();
-                        s?.removeAllRanges();
-                        s?.addRange(savedRange);
-                    }
-                    editor.editorArea.focus();
-                    document.execCommand('insertHTML', false, html + '<p><br></p>');
-                }
-                editor.textArea.value = editor.editorArea.innerHTML;
-                closePopup();
-            });
-
-            const cancelBtn = document.createElement('button');
-            cancelBtn.className = 'play-editor-button-popup-cancel';
-            cancelBtn.textContent = 'Cancel';
-            cancelBtn.addEventListener('mousedown', (e) => { e.preventDefault(); closePopup(); });
-
-            actions.appendChild(insertBtn);
-            actions.appendChild(cancelBtn);
-            popup.appendChild(actions);
-
-            // Prevent clicks inside popup from bubbling
-            popup.addEventListener('mousedown', (e) => e.stopPropagation());
-
-            editor.container.style.position = 'relative';
-            editor.container.appendChild(popup);
-
-            setTimeout(() => textInput.focus(), 0);
-
-            docClickHandler = (e: MouseEvent) => {
-                if (popup && !popup.contains(e.target as Node)) closePopup();
-            };
-            setTimeout(() => { if (docClickHandler) document.addEventListener('mousedown', docClickHandler); }, 0);
-        }
-
-        const btnEl = editor.addToolbarButton(icons.buttonBlock, 'Insert Button', () => {
-            if (popup) { closePopup(); return; }
-
+        editor.addToolbarButton(icons.buttonBlock, 'Insert Button', () => {
             const sel = window.getSelection();
-            let savedRange: Range | null = null;
-            if (sel && sel.rangeCount > 0) savedRange = sel.getRangeAt(0).cloneRange();
-
-            openPopup({ text: 'Click Here', url: 'https://', bgColor: '#3b82f6', textColor: '#ffffff', borderRadius: 4, paddingV: 12, paddingH: 24 }, savedRange);
+            const savedRange = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
+            openButtonModal(editor, { ...DEFAULT_CONFIG }, null, savedRange);
         });
 
-        // Edit existing button blocks on click
         const editHandler = (e: MouseEvent) => {
             const target = e.target as HTMLElement;
             const block = target.closest('.play-editor-button-block') as HTMLElement | null;
             if (!block) return;
             e.preventDefault();
-            editingEl = block;
-            openPopup(parseButtonBlock(block), null);
+            openButtonModal(editor, parseButtonBlock(block), block, null);
         };
         editor.editorArea.addEventListener('click', editHandler);
 
         editor.onDestroy(() => {
-            closePopup();
             editor.editorArea.removeEventListener('click', editHandler);
         });
     }

@@ -31,4 +31,14 @@ export { FontFamilyPlugin } from './plugins/font-family';
 export { BlockQuotePlugin } from './plugins/block-quote';
 export { FindReplacePlugin } from './plugins/find-replace';
 export { WordCountPlugin } from './plugins/word-count';
+export { openFormModal, openInfoModal } from './core/modal';
+export type {
+    ModalField,
+    ModalFieldRow,
+    ModalFieldType,
+    FormModalOptions,
+    InfoModalOptions,
+    ModalTheme,
+    ModalButtonTheme
+} from './core/modal';
 import './styles/core.css';
