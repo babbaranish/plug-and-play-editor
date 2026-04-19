@@ -7,6 +7,8 @@ A modern, extensible rich text editor component for the web. Use it with vanilla
 
 > Version history and breaking-change notes live in [CHANGELOG.md](https://github.com/babbaranish/plug-and-play-editor/blob/master/CHANGELOG.md).
 
+![Plug-and-Play Editor screenshot](https://raw.githubusercontent.com/babbaranish/plug-and-play-editor/master/assets/editor-screenshot.png)
+
 ---
 
 ## ✨ Features
