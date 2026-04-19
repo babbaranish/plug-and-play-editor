@@ -5,7 +5,7 @@ A modern, extensible rich text editor component for the web. Use it with vanilla
 [![npm version](https://img.shields.io/npm/v/plug-and-play-editor.svg)](https://www.npmjs.com/package/plug-and-play-editor)
 [![bundle size](https://img.shields.io/bundlephobia/minzip/plug-and-play-editor)](https://bundlephobia.com/package/plug-and-play-editor)
 
-> Version history and breaking-change notes live in [CHANGELOG.md](./CHANGELOG.md).
+> Version history and breaking-change notes live in [CHANGELOG.md](https://github.com/babbaranish/plug-and-play-editor/blob/master/CHANGELOG.md).
 
 ---
 
