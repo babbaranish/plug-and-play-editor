@@ -74,7 +74,7 @@ export const EmojiPlugin: Plugin = {
                             sel?.addRange(savedRange);
                         }
 
-                        editor.exec('insertHTML', emoji);
+                        editor.execCommand('insertHTML', emoji);
 
                         // Update saved range for next insert
                         if (sel && sel.rangeCount > 0) {

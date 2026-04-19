@@ -8,19 +8,19 @@ export const ListsPlugin: Plugin = {
         editor.addToolbarDivider();
 
         editor.addToolbarButton(icons.listUnordered, 'Unordered List', () => {
-            editor.exec('insertUnorderedList');
+            editor.execCommand('insertUnorderedList');
         });
 
         editor.addToolbarButton(icons.listOrdered, 'Ordered List', () => {
-            editor.exec('insertOrderedList');
+            editor.execCommand('insertOrderedList');
         });
 
         editor.addToolbarButton(icons.indent, 'Indent', () => {
-            editor.exec('indent');
+            editor.execCommand('indent');
         });
 
         editor.addToolbarButton(icons.outdent, 'Outdent', () => {
-            editor.exec('outdent');
+            editor.execCommand('outdent');
         });
     }
 };

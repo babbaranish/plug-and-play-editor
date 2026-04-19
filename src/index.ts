@@ -32,6 +32,28 @@ export { BlockQuotePlugin } from './plugins/block-quote';
 export { FindReplacePlugin } from './plugins/find-replace';
 export { WordCountPlugin } from './plugins/word-count';
 export { openFormModal, openInfoModal } from './core/modal';
+export {
+    NONE as NONE_SELECTION,
+    point,
+    caret,
+    range,
+    comparePaths,
+    comparePoints,
+    isAncestor,
+    commonAncestor,
+    readSelection,
+    writeSelection,
+    domToPoint,
+    pointToDom
+} from './core/selection';
+export type {
+    Point,
+    Selection,
+    CaretSelection,
+    RangeSelection,
+    EmptySelection,
+    Path
+} from './core/selection';
 export type {
     ModalField,
     ModalFieldRow,

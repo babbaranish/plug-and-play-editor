@@ -6,19 +6,19 @@ export const FormattingPlugin: Plugin = {
     name: 'formatting',
     init(editor: Editor) {
         editor.addToolbarButton(icons.bold, 'Bold', () => {
-            editor.exec('bold');
+            editor.execCommand('bold');
         }, 'bold');
 
         editor.addToolbarButton(icons.italic, 'Italic', () => {
-            editor.exec('italic');
+            editor.execCommand('italic');
         }, 'italic');
 
         editor.addToolbarButton(icons.underline, 'Underline', () => {
-            editor.exec('underline');
+            editor.execCommand('underline');
         }, 'underline');
 
         editor.addToolbarButton(icons.strikethrough, 'Strikethrough', () => {
-            editor.exec('strikeThrough');
+            editor.execCommand('strikeThrough');
         }, 'strikeThrough');
 
         // Headings dropdown
@@ -50,9 +50,9 @@ export const FormattingPlugin: Plugin = {
         select.addEventListener('change', () => {
             const tag = select.value;
             if (tag) {
-                editor.exec('formatBlock', `<${tag}>`);
+                editor.execCommand('formatBlock', `<${tag}>`);
             } else {
-                editor.exec('formatBlock', '<p>');
+                editor.execCommand('formatBlock', '<p>');
             }
             select.value = '';
         });
@@ -68,11 +68,11 @@ export const UndoRedoPlugin: Plugin = {
         editor.addToolbarDivider();
 
         editor.addToolbarButton(icons.undo, 'Undo', () => {
-            editor.exec('undo');
+            editor.execCommand('undo');
         });
 
         editor.addToolbarButton(icons.redo, 'Redo', () => {
-            editor.exec('redo');
+            editor.execCommand('redo');
         });
     }
 };

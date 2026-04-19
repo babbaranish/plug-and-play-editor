@@ -24,7 +24,7 @@ export const ColorPlugin: Plugin = {
 
             input.addEventListener('input', (e) => {
                 const target = e.target as HTMLInputElement;
-                editor.exec(command, target.value);
+                editor.execCommand(command, target.value);
             });
 
             editor.toolbar.appendChild(wrapper);

@@ -1,4 +1,6 @@
 import type { Plugin } from './Plugin';
+import { readSelection, writeSelection, domToPoint } from './selection';
+import type { Point, Selection } from './selection';
 
 export class Editor {
     public container: HTMLElement;
@@ -163,11 +165,6 @@ export class Editor {
         this.syncContent();
     }
 
-    /** @deprecated Use execCommand instead. Kept for backwards compatibility. */
-    public exec(command: string, value: string | undefined = undefined) {
-        this.execCommand(command, value);
-    }
-
     public addToolbarButton(iconHtml: string, tooltip: string, onClick: () => void, command?: string, target?: HTMLElement) {
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -316,6 +313,35 @@ export class Editor {
     /** Register a cleanup function to be called on destroy */
     public onDestroy(fn: () => void) {
         this.cleanupFns.push(fn);
+    }
+
+    /**
+     * Read the current browser selection and resolve it into a structured
+     * {@link Selection} relative to `editorArea`. Returns `{ kind: 'none' }`
+     * when the selection is empty or outside the editor.
+     */
+    public getSelection(): Selection {
+        return readSelection(this.editorArea);
+    }
+
+    /**
+     * Apply a structured {@link Selection} back to the DOM. Throws if the
+     * selection refers to a path that no longer resolves.
+     *
+     * Does NOT focus the editor. Caller should call `editor.editorArea.focus()`
+     * first when focus is desired.
+     */
+    public setSelection(sel: Selection): void {
+        writeSelection(this.editorArea, sel);
+    }
+
+    /**
+     * Resolve a DOM (node, offset) pair to a structured {@link Point}
+     * relative to `editorArea`. Returns `null` when the node is not in
+     * the editor.
+     */
+    public resolvePoint(node: Node, offset: number): Point | null {
+        return domToPoint(this.editorArea, node, offset);
     }
 
     /**

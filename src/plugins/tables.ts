@@ -38,7 +38,7 @@ export const TablesPlugin: Plugin = {
             }
             html += '</tbody></table><p><br></p>';
 
-            editor.exec('insertHTML', html);
+            editor.execCommand('insertHTML', html);
         }, undefined, group);
 
         editor.addToolbarButton(icons.tableRowAdd, 'Add Row Below', () => {

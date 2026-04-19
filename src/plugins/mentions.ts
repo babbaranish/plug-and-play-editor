@@ -43,7 +43,7 @@ export function createMentionsPlugin(options: MentionsPluginOptions = {}): Plugi
             editor.addToolbarDivider();
             editor.addToolbarButton(icons.atSign, 'Mention (@)', () => {
                 editor.editorArea.focus();
-                editor.exec('insertHTML', trigger);
+                editor.execCommand('insertHTML', trigger);
                 // Trigger the input handler manually
                 handleInput();
             });
