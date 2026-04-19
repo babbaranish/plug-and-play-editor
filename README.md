@@ -17,8 +17,9 @@ A modern, extensible rich text editor component for the web. Use it with vanilla
 | **Color** | Text color picker, Background highlight color |
 | **Alignment** | Left, Center, Right, Justify |
 | **Direction** | LTR / RTL support |
-| **Links** | Insert link (with URL validation), Unlink |
-| **Media** | Insert image (URL), Upload image (file picker, 10 MB limit), Paste image (clipboard), Insert video/embed (sanitized iframes) |
+| **Links** | Insert link via modal (with URL validation & inline error), Unlink |
+| **Media** | Insert image (URL, modal-based), Upload image (file picker, 10 MB limit), Paste image (clipboard), Insert video/embed via modal (sanitized iframes) |
+| **Modals** | Themable `openFormModal` / `openInfoModal` helpers — text / url / textarea / color / number / select fields, row grouping, inline errors, ESC / backdrop close, per-modal submit & cancel button theming |
 | **Tables** | Insert table, Add/Delete rows, Add/Delete columns |
 | **Code** | Inline code, Code blocks (dark theme), HTML source view toggle |
 | **Mentions** | `@mention` dropdown with keyboard navigation, configurable user list, debounced async search |
@@ -230,6 +231,16 @@ function LightEditor() {
 }
 ```
 
+Need the full list programmatically? Import `ALL_PLUGINS` from the dedicated subpath (this is also what `PlayEditor` loads by default):
+
+```tsx
+import { PlayEditor } from 'plug-and-play-editor/react';
+import { ALL_PLUGINS } from 'plug-and-play-editor/react/defaults';
+import { MyCustomPlugin } from './my-custom-plugin';
+
+<PlayEditor plugins={[...ALL_PLUGINS, MyCustomPlugin]} />
+```
+
 ### React — Disabled / Read-Only
 
 ```tsx
@@ -239,6 +250,51 @@ function LightEditor() {
 // Read-only — content visible but not editable
 <PlayEditor defaultValue="<p>View-only content</p>" readOnly />
 ```
+
+### Modals (for plugin authors)
+
+`openFormModal` / `openInfoModal` are the primitives plugins use for data entry and messages. They render a centered dialog inside the editor container, support inline validation errors, ESC / backdrop close, and accept per-modal button theming.
+
+```ts
+import { openFormModal, openInfoModal } from 'plug-and-play-editor';
+
+// Form modal — rich field types + row grouping
+openFormModal(editor, {
+  title: 'Insert Button',
+  submitLabel: 'Insert',
+  fields: [
+    { name: 'text', label: 'Label', type: 'text', value: 'Click' },
+    { name: 'url',  label: 'URL',   type: 'url',  value: 'https://' },
+    [
+      { name: 'bg',    label: 'Background', type: 'color',  value: '#3b82f6' },
+      { name: 'color', label: 'Text',       type: 'color',  value: '#ffffff' }
+    ],
+    {
+      name: 'size', label: 'Size', type: 'select', value: 'md',
+      options: [{ value: 'sm', label: 'Small' }, { value: 'md', label: 'Medium' }, { value: 'lg', label: 'Large' }]
+    }
+  ],
+  theme: {
+    submit: { background: '#10b981', color: '#fff', fontFamily: 'Inter', fontWeight: '600' },
+    cancel: { color: '#64748b' }
+  },
+  onSubmit: (values, { showError, close }) => {
+    if (!values.url) return showError('URL is required.');
+    // ... do work ...
+    close();
+  }
+});
+
+// Info modal — read-only message or preformatted content
+openInfoModal(editor, {
+  title: 'Content',
+  content: editor.getContent(),
+  preformatted: true,
+  theme: { submit: { background: '#10b981' } }
+});
+```
+
+Supported field types: `text`, `url`, `textarea`, `color`, `number`, `select`. Arrays of fields render side-by-side as a row.
 
 ---
 
@@ -437,6 +493,8 @@ const editor = new Editor(selector: string | HTMLTextAreaElement, plugins: Plugi
 | `exec(command, value?)` | `void` | Run a `document.execCommand` |
 | `addToolbarButton(iconHtml, tooltip, onClick, command?)` | `HTMLButtonElement` | Add a custom toolbar button. Pass `command` to enable active state tracking. |
 | `addToolbarDivider()` | `void` | Add a visual divider to the toolbar |
+| `onSelectionChange(fn)` | `() => void` | Subscribe to selection changes inside the editor. Handler fires at most once per frame (rAF-coalesced) and only when the selection is inside the editor. Returns an unsubscribe function. |
+| `onInput(fn)` | `() => void` | Subscribe to editor input changes. Handler fires at most once per frame, after the backing textarea is synced. Returns an unsubscribe function. |
 | `onDestroy(fn)` | `void` | Register a cleanup function called on `destroy()` |
 | `destroy()` | `void` | Tear down the editor, clean up plugins and event listeners, restore the textarea |
 
@@ -528,6 +586,41 @@ editor.destroy();
 
 ---
 
+## 📦 Bundle Size & Tree-Shaking
+
+The package is published with `"sideEffects"` limited to CSS files, so bundlers that support tree-shaking (esbuild, Rollup, Vite, Webpack 5+) drop everything you don't import:
+
+```ts
+// Vanilla — selective imports yield ~10 KB bundled (gzipped), not ~21 KB.
+import { Editor, FormattingPlugin, LinksPlugin } from 'plug-and-play-editor';
+```
+
+For React, default plugins load synchronously so the toolbar paints on the first frame. If you want the smallest React bundle, pass your own `plugins` prop and optionally pull the full list from the subpath import:
+
+```tsx
+import { PlayEditor } from 'plug-and-play-editor/react';
+import { FormattingPlugin, LinksPlugin } from 'plug-and-play-editor';
+
+<PlayEditor plugins={[FormattingPlugin, LinksPlugin]} />
+```
+
+No runtime dependencies. CSS ships once at `plug-and-play-editor/style.css` (22 KB, 4.5 KB gzipped).
+
+---
+
+## ⚡ Performance
+
+Internal hot paths are optimized for large documents and fast typing:
+
+- **rAF-coalesced selection/input dispatch** — `document.selectionchange` fires on every cursor move; the editor subscribes once and fans out to plugins at most once per frame, after a single "is selection in editor?" check.
+- **Cached command buttons** — `updateActiveStates` iterates a pre-built array instead of re-querying the toolbar DOM.
+- **Plugin subscription APIs** — `editor.onSelectionChange(fn)` and `editor.onInput(fn)` let plugins hook into the same coalesced dispatch instead of adding their own document-level listeners.
+- **Short-circuited word count** — text stats are cached; selection changes re-render without rescanning `textContent`.
+
+Rapid cursor movement (50 events) dispatches in <1 ms and collapses into a single update.
+
+---
+
 ## 🔒 Security
 
 The editor includes built-in protections against common web vulnerabilities:
@@ -546,9 +639,10 @@ The editor includes built-in protections against common web vulnerabilities:
 plug-and-play-editor/
 ├── src/
 │   ├── core/
-│   │   ├── Editor.ts       # Core editor class (lifecycle, shortcuts, active states)
+│   │   ├── Editor.ts       # Core editor class (lifecycle, shortcuts, rAF-coalesced selectionchange/input)
 │   │   ├── Plugin.ts       # Plugin interface (init + optional destroy)
-│   │   └── icons.ts        # SVG icon library
+│   │   ├── icons.ts        # SVG icon library
+│   │   └── modal.ts        # Reusable openFormModal / openInfoModal helpers
 │   ├── plugins/
 │   │   ├── formatting.ts   # Bold, Italic, Headings, Undo/Redo
 │   │   ├── lists.ts        # UL, OL, indent
@@ -581,7 +675,8 @@ plug-and-play-editor/
 │   ├── styles/
 │   │   └── core.css        # All styles (responsive, print, a11y)
 │   ├── index.ts            # Vanilla JS entry
-│   └── react.tsx           # React component (with disabled/readOnly)
+│   ├── react.tsx           # React component (with disabled/readOnly)
+│   └── react-defaults.ts   # ALL_PLUGINS constant, re-exported from `/react/defaults`
 ├── package.json
 ├── vite.config.ts
 └── tsconfig.json
