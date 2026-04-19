@@ -1,12 +1,14 @@
 import { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import type { Plugin } from './core/Plugin';
 import { Editor } from './core/Editor';
+import { ALL_PLUGINS } from './react-defaults';
 import './styles/core.css';
 
-// NOTE: The default set of plugins is loaded lazily via dynamic import so that
-// callers who pass their own `plugins` prop only bundle what they actually use.
-// Consumers who want the full set explicitly can `import { ALL_PLUGINS } from
-// 'plug-and-play-editor/react/defaults'`.
+// Default plugin list is loaded synchronously so the toolbar renders on the
+// first paint. Consumers who want to select a custom subset can pass
+// `plugins={[...]}`; the same ALL_PLUGINS constant is also re-exported from
+// `plug-and-play-editor/react/defaults` for convenience.
+export { ALL_PLUGINS };
 
 export interface PlayEditorProps {
     /** Initial HTML content */
@@ -47,39 +49,23 @@ export const PlayEditor = forwardRef<PlayEditorRef, PlayEditorProps>(
 
         useEffect(() => {
             if (!textareaRef.current || editorRef.current) return;
-            const textarea = textareaRef.current;
-            let cancelled = false;
+            const editor = new Editor(textareaRef.current, plugins ?? ALL_PLUGINS);
+            editorRef.current = editor;
+
+            if (minHeight) {
+                editor.editorArea.style.minHeight = `${minHeight}px`;
+            }
+
             let inputHandler: (() => void) | null = null;
-
-            const initWith = (pluginList: Plugin[]) => {
-                if (cancelled || !textarea.parentNode) return;
-                const editor = new Editor(textarea, pluginList);
-                editorRef.current = editor;
-
-                if (minHeight) {
-                    editor.editorArea.style.minHeight = `${minHeight}px`;
-                }
-
-                if (onChange) {
-                    inputHandler = () => onChange(editor.getContent());
-                    editor.editorArea.addEventListener('input', inputHandler);
-                }
-            };
-
-            if (plugins) {
-                initWith(plugins);
-            } else {
-                import('./react-defaults').then((m) => initWith(m.ALL_PLUGINS));
+            if (onChange) {
+                inputHandler = () => onChange(editor.getContent());
+                editor.editorArea.addEventListener('input', inputHandler);
             }
 
             return () => {
-                cancelled = true;
-                const editor = editorRef.current;
-                if (editor) {
-                    if (inputHandler) editor.editorArea.removeEventListener('input', inputHandler);
-                    editor.destroy();
-                    editorRef.current = null;
-                }
+                if (inputHandler) editor.editorArea.removeEventListener('input', inputHandler);
+                editor.destroy();
+                editorRef.current = null;
             };
         }, []);
 
