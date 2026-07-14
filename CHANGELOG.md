@@ -5,6 +5,42 @@ format follows [Keep a Changelog](https://keepachangelog.com/), and the
 project adheres to [Semantic Versioning](https://semver.org/) while
 pre-1.0 (minor versions may contain breaking changes).
 
+## [0.7.0] - 2026-07-14
+
+### Added
+
+- **Drag & drop image insertion** (`DragDropImagePlugin`). Drag an image
+  file from the OS onto the editor to insert it at the drop point
+  (10 MB limit, same as the existing upload flow); dashed-outline
+  visual feedback while dragging over. Included in the default React
+  plugin set.
+- **Source code view overhaul** (`SourceCodePlugin`). The raw-HTML
+  toggle now has line numbers, real syntax highlighting (tags,
+  attributes, values, text, comments each colored separately),
+  auto-formatted 2-space indentation on entry, collapsible blocks
+  (folding auto-expands the instant you click/focus so nothing can be
+  silently lost), and an on-demand "Format code" button to re-indent
+  without leaving source mode. Backed by two new internal modules,
+  `source-code-format.ts` (pretty-printer) and
+  `source-code-highlight.ts` (tokenizer).
+- **Template variables in button blocks** (`ButtonBlockPlugin` /
+  `createButtonBlockPlugin(options)`). A compact `{ }` picker next to
+  the button's Text and URL fields inserts a `{{token}}` at the
+  cursor. `PreviewPlugin` now also resolves tokens found inside
+  element attributes (e.g. a button's `href`), not just visible text.
+- `core/modal.ts`: `ModalField` gained an optional `tokens` config so
+  any form-modal text/url field can offer the same variable picker.
+
+### Fixed
+
+- **Image resize "pixel drop-off"**. Dragging a resize handle past the
+  container's width (images have `max-width:100%`) used to let the
+  requested size and the actual rendered size silently diverge — the
+  dimension label would show a value CSS was quietly clipping, and the
+  image could render at a distorted aspect ratio. The resize handler
+  now reads the real rendered box back after each frame and reports
+  that, with rapid drags batched through `requestAnimationFrame`.
+
 ## [0.6.0] - 2026-04-19
 
 Major architecture expansion - three new opt-in subsystems land alongside
