@@ -57,8 +57,10 @@ export const ImageResizePlugin: Plugin = {
                     const startH = img.offsetHeight;
                     const aspect = startW / startH;
 
-                    const onMove = (ev: MouseEvent) => {
-                        ev.preventDefault();
+                    let rafId: number | null = null;
+                    let pendingEvent: MouseEvent | null = null;
+
+                    const applyResize = (ev: MouseEvent) => {
                         let dx = ev.clientX - startX;
                         let dy = ev.clientY - startY;
 
@@ -69,20 +71,52 @@ export const ImageResizePlugin: Plugin = {
 
                         // Use the larger delta for proportional resize
                         const delta = Math.abs(dx) > Math.abs(dy) ? dx : dy;
-                        let newW = Math.max(20, startW + delta);
-                        let newH = newW / aspect;
+                        const requestedW = Math.max(20, startW + delta);
 
-                        img.style.width = `${Math.round(newW)}px`;
-                        img.style.height = `${Math.round(newH)}px`;
+                        img.style.width = `${Math.round(requestedW)}px`;
+                        img.style.height = `${Math.round(requestedW / aspect)}px`;
+
+                        // img.style.maxWidth is set to 100% by MediaPlugin/PasteImagePlugin,
+                        // so a width beyond the containing block gets silently clamped by
+                        // CSS at render time. Rather than pre-computing the available space
+                        // (fragile — clientWidth doesn't account for the container's own
+                        // padding/box-sizing), read back what actually got rendered and
+                        // re-derive height from *that*, so the image never distorts and the
+                        // label never reports pixels that got clipped right back down.
+                        const renderedW = Math.round(img.getBoundingClientRect().width);
+                        const renderedH = Math.round(renderedW / aspect);
+                        if (renderedW !== Math.round(requestedW)) {
+                            img.style.height = `${renderedH}px`;
+                        }
 
                         positionOverlay();
-                        info.textContent = `${Math.round(newW)} × ${Math.round(newH)}`;
+                        info.textContent = `${renderedW} × ${renderedH}`;
+                    };
+
+                    const onMove = (ev: MouseEvent) => {
+                        ev.preventDefault();
+                        pendingEvent = ev;
+                        // Batch rapid mousemove bursts (fast/"quick" drags) into one
+                        // layout pass per frame instead of one per event.
+                        if (rafId === null) {
+                            rafId = requestAnimationFrame(() => {
+                                rafId = null;
+                                if (pendingEvent) applyResize(pendingEvent);
+                            });
+                        }
                     };
 
                     const onUp = () => {
                         isDragging = false;
                         document.removeEventListener('mousemove', onMove);
                         document.removeEventListener('mouseup', onUp);
+                        if (rafId !== null) {
+                            cancelAnimationFrame(rafId);
+                            rafId = null;
+                            // Make sure the final pointer position is reflected even
+                            // if a frame was still pending when the button was released.
+                            if (pendingEvent) applyResize(pendingEvent);
+                        }
                         editor.textArea.value = editor.editorArea.innerHTML;
                     };
 

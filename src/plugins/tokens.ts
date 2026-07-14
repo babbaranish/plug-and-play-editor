@@ -18,7 +18,7 @@ export interface TokensPluginOptions {
     delimiter?: 'double-curly' | 'single-curly' | 'percent';
 }
 
-const DELIMITER_MAP = {
+export const DELIMITER_MAP = {
     'double-curly': ['{{', '}}'],
     'single-curly': ['{', '}'],
     'percent': ['%', '%'],

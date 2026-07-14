@@ -18,7 +18,7 @@ A modern, extensible rich text editor component for the web. Use it with vanilla
 | **Alignment** | Left, Center, Right, Justify |
 | **Direction** | LTR / RTL support |
 | **Links** | Insert link (with URL validation), Unlink |
-| **Media** | Insert image (URL), Upload image (file picker, 10 MB limit), Paste image (clipboard), Insert video/embed (sanitized iframes) |
+| **Media** | Insert image (URL), Upload image (file picker, 10 MB limit), Paste image (clipboard), Drag & drop image files (10 MB limit), Insert video/embed (sanitized iframes) |
 | **Tables** | Insert table, Add/Delete rows, Add/Delete columns |
 | **Code** | Inline code, Code blocks (dark theme), HTML source view toggle |
 | **Mentions** | `@mention` dropdown with keyboard navigation, configurable user list, debounced async search |
@@ -28,11 +28,11 @@ A modern, extensible rich text editor component for the web. Use it with vanilla
 | **Template Variables** | Insertable `{{token}}` placeholders for email templates, searchable picker, grouped by category, configurable delimiters |
 | **Font Size** | Dropdown with 12 preset sizes (10px–48px), applies as inline styles for email compatibility |
 | **Spacing** | Line height (1.0–2.5) and paragraph spacing (compact–double) controls |
-| **Button Block** | CTA button builder with text, URL, colors, radius, padding — email-client-compatible inline styles |
+| **Button Block** | CTA button builder with text, URL, colors, radius, padding — email-client-compatible inline styles, insert `{{token}}` variables into the text or URL |
 | **Paste Cleanup** | Automatically strips Word/Google Docs junk on paste, Ctrl+Shift+V for plain text paste |
-| **Image Resize** | Click-to-select images with drag handles for proportional resizing |
+| **Image Resize** | Click-to-select images with drag handles for proportional resizing, clamped to the container width |
 | **Preview Mode** | Toggle preview with token replacement (e.g. `{{first_name}}` → "Alice"), 600px email-width view |
-| **Source Code** | Toggle HTML source code editing mode with syntax-friendly monospace view |
+| **Source Code** | Toggle HTML source code editing with line numbers, syntax highlighting, auto-formatted indentation, and collapsible blocks |
 | **Font Family** | Dropdown with 11 font families (Arial, Georgia, Times New Roman, Courier New, etc.) |
 | **Block Quote** | Toggle blockquote formatting with active state tracking |
 | **Find & Replace** | Search with live highlighting, match counter, Find Next, Replace, Replace All — Ctrl/Cmd+F shortcut |
@@ -104,7 +104,7 @@ function App() {
 }
 ```
 
-That's it — **all 29 plugins load automatically** in the React component (including email template features: tokens, button blocks, font size, spacing, paste cleanup, image resize, preview mode, source code editing, font family, block quote, find & replace, and word count).
+That's it — **all 30 plugins load automatically** in the React component (including email template features: tokens, button blocks, font size, spacing, paste cleanup, image resize, preview mode, source code editing, font family, block quote, find & replace, and word count).
 
 ---
 
@@ -128,6 +128,7 @@ import {
   PageBreakPlugin,
   TocPlugin,
   PasteImagePlugin,
+  DragDropImagePlugin,
   MentionsPlugin,
   CodeBlockPlugin,
   DateTimePlugin,
@@ -160,6 +161,7 @@ const editor = new Editor('#my-textarea', [
   PageBreakPlugin,
   TocPlugin,
   PasteImagePlugin,
+  DragDropImagePlugin,
   MentionsPlugin,
   CodeBlockPlugin,
   DateTimePlugin,
@@ -261,6 +263,7 @@ function LightEditor() {
 | **Page Break** | `PageBreakPlugin` | Horizontal rule & page break |
 | **TOC** | `TocPlugin` | Auto-generated Table of Contents from headings |
 | **Paste Image** | `PasteImagePlugin` | Cmd+V / Ctrl+V paste images from clipboard |
+| **Drag & Drop Image** | `DragDropImagePlugin` | Drag image files from the OS onto the editor to insert them, 10 MB limit |
 | **Mentions** | `MentionsPlugin` | `@mention` dropdown (uses default empty user list) |
 | **Code Block** | `CodeBlockPlugin` | Inline code, fenced code blocks, HTML source toggle |
 | **Date/Time** | `DateTimePlugin` | Insert current date or time as styled badge |
@@ -269,10 +272,10 @@ function LightEditor() {
 | **Paste Cleanup** | `PasteCleanupPlugin` | Auto-cleans pasted HTML from Word/Docs, Ctrl+Shift+V for plain text |
 | **Font Size** | `FontSizePlugin` | Font size dropdown (10–48px) with inline style output |
 | **Spacing** | `SpacingPlugin` | Line height & paragraph spacing controls |
-| **Button Block** | `ButtonBlockPlugin` | CTA button builder with colors, padding, radius — click to re-edit |
+| **Button Block** | `ButtonBlockPlugin` / `createButtonBlockPlugin(options)` | CTA button builder with colors, padding, radius — click to re-edit; a `{ }` picker next to the Text/URL fields inserts template variables, resolved by `PreviewPlugin` in both cases |
 | **Image Resize** | `ImageResizePlugin` | Click images to show resize handles, drag to resize proportionally |
 | **Preview** | `PreviewPlugin` | Preview mode with token replacement and 600px email-width view |
-| **Source Code** | `SourceCodePlugin` | Toggle raw HTML source code editing with monospace view, disables other toolbar controls in source mode |
+| **Source Code** | `SourceCodePlugin` | Toggle raw HTML source view with line numbers, syntax highlighting, auto-formatted indentation, and collapsible blocks; disables other toolbar controls in source mode |
 | **Font Family** | `FontFamilyPlugin` | Font family dropdown with 11 fonts (Arial, Georgia, Times New Roman, Courier New, etc.) |
 | **Block Quote** | `BlockQuotePlugin` | Toggle blockquote formatting with active state tracking |
 | **Find & Replace** | `FindReplacePlugin` | Search panel with live highlighting, match counter, Find Next, Replace, Replace All — Ctrl/Cmd+F shortcut |
@@ -562,6 +565,7 @@ plug-and-play-editor/
 │   │   ├── page-break.ts   # HR & page breaks
 │   │   ├── toc.ts          # Table of Contents (XSS-safe)
 │   │   ├── paste-image.ts  # Clipboard paste
+│   │   ├── drag-drop-image.ts # Drag & drop image files onto the editor
 │   │   ├── mentions.ts     # @mentions (debounced, ARIA, XSS-safe)
 │   │   ├── code-block.ts   # Code blocks
 │   │   ├── datetime.ts     # Date/Time insert
@@ -570,10 +574,12 @@ plug-and-play-editor/
 │   │   ├── paste-cleanup.ts # Paste cleanup (Word/Docs sanitization)
 │   │   ├── font-size.ts    # Font size dropdown (inline styles)
 │   │   ├── spacing.ts      # Line height & paragraph spacing
-│   │   ├── button-block.ts # CTA button builder (email-compatible)
+│   │   ├── button-block.ts # CTA button builder (email-compatible, token-aware)
 │   │   ├── image-resize.ts # Image resize handles
 │   │   ├── preview.ts      # Preview mode with token replacement
-│   │   ├── source-code.ts  # HTML source code editing toggle
+│   │   ├── source-code.ts  # HTML source view: line numbers, highlighting, folding
+│   │   ├── source-code-format.ts # HTML pretty-printer used by the source view
+│   │   ├── source-code-highlight.ts # HTML syntax tokenizer used by the source view
 │   │   ├── font-family.ts  # Font family dropdown
 │   │   ├── block-quote.ts  # Blockquote formatting
 │   │   ├── find-replace.ts # Find & Replace panel

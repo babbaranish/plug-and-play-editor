@@ -1,6 +1,15 @@
 import type { Plugin } from '../core/Plugin';
 import type { Editor } from '../core/Editor';
 import { icons } from '../core/icons';
+import type { Token } from './tokens';
+import { DEFAULT_EMAIL_TOKENS, DELIMITER_MAP } from './tokens';
+
+export interface ButtonBlockPluginOptions {
+    /** Variables offered by the "insert variable" picker on the Text/URL fields */
+    tokens?: Token[];
+    /** Delimiter style — must match how those tokens get replaced elsewhere (default "double-curly") */
+    delimiter?: 'double-curly' | 'single-curly' | 'percent';
+}
 
 function isValidUrl(url: string): boolean {
     try {
@@ -52,7 +61,11 @@ function parseButtonBlock(el: HTMLElement): ButtonConfig {
     };
 }
 
-export const ButtonBlockPlugin: Plugin = {
+export function createButtonBlockPlugin(options?: ButtonBlockPluginOptions): Plugin {
+    const tokens = options?.tokens ?? DEFAULT_EMAIL_TOKENS;
+    const [tokenOpen, tokenClose] = DELIMITER_MAP[options?.delimiter || 'double-curly'];
+
+    return {
     name: 'button-block',
     init(editor: Editor) {
         editor.addToolbarDivider();
@@ -83,7 +96,60 @@ export const ButtonBlockPlugin: Plugin = {
             popup.style.top = `${toolbarRect.bottom - containerRect.top}px`;
             popup.style.left = `${leftPos}px`;
 
-            function field(label: string, type: string, value: string): HTMLInputElement {
+            function insertTokenIntoInput(input: HTMLInputElement, key: string) {
+                const value = input.value;
+                const start = input.selectionStart ?? value.length;
+                const end = input.selectionEnd ?? value.length;
+                const tokenText = `${tokenOpen}${key}${tokenClose}`;
+                input.value = value.slice(0, start) + tokenText + value.slice(end);
+                input.focus();
+                const newPos = start + tokenText.length;
+                input.setSelectionRange(newPos, newPos);
+            }
+
+            function buildTokenSelect(input: HTMLInputElement): HTMLSelectElement {
+                const select = document.createElement('select');
+                select.className = 'play-editor-button-popup-token-select';
+                select.title = 'Insert variable';
+                select.setAttribute('aria-label', 'Insert variable');
+
+                const placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.textContent = '{ }';
+                select.appendChild(placeholder);
+
+                const grouped = new Map<string, Token[]>();
+                tokens.forEach(t => {
+                    const cat = t.category || '';
+                    if (!grouped.has(cat)) grouped.set(cat, []);
+                    grouped.get(cat)!.push(t);
+                });
+
+                grouped.forEach((groupTokens, category) => {
+                    let container: HTMLSelectElement | HTMLOptGroupElement = select;
+                    if (category) {
+                        container = document.createElement('optgroup');
+                        container.label = category;
+                        select.appendChild(container);
+                    }
+                    groupTokens.forEach(t => {
+                        const opt = document.createElement('option');
+                        opt.value = t.key;
+                        opt.textContent = t.label;
+                        container.appendChild(opt);
+                    });
+                });
+
+                select.addEventListener('change', () => {
+                    if (!select.value) return;
+                    insertTokenIntoInput(input, select.value);
+                    select.value = '';
+                });
+
+                return select;
+            }
+
+            function field(label: string, type: string, value: string, withTokens = false): HTMLInputElement {
                 const lbl = document.createElement('label');
                 lbl.className = 'play-editor-button-popup-label';
                 lbl.textContent = label;
@@ -91,13 +157,23 @@ export const ButtonBlockPlugin: Plugin = {
                 input.type = type;
                 input.value = value;
                 input.className = type === 'color' ? 'play-editor-button-popup-color' : 'play-editor-button-popup-input';
-                lbl.appendChild(input);
+
+                if (withTokens && tokens.length > 0) {
+                    const row = document.createElement('div');
+                    row.className = 'play-editor-button-popup-field-row';
+                    row.appendChild(input);
+                    row.appendChild(buildTokenSelect(input));
+                    lbl.appendChild(row);
+                } else {
+                    lbl.appendChild(input);
+                }
+
                 popup!.appendChild(lbl);
                 return input;
             }
 
-            const textInput = field('Button Text', 'text', config.text);
-            const urlInput = field('Button URL', 'url', config.url);
+            const textInput = field('Button Text', 'text', config.text, true);
+            const urlInput = field('Button URL', 'url', config.url, true);
 
             // Color row
             const colorRow = document.createElement('div');
@@ -238,4 +314,8 @@ export const ButtonBlockPlugin: Plugin = {
             editor.editorArea.removeEventListener('click', editHandler);
         });
     }
-};
+    };
+}
+
+/** Pre-configured button block plugin with the default email token set */
+export const ButtonBlockPlugin = createButtonBlockPlugin();

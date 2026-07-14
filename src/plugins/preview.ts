@@ -59,6 +59,20 @@ export function createPreviewPlugin(options?: PreviewPluginOptions): Plugin {
                     }
                 });
 
+                // Also replace {{token}} patterns inside attribute values — e.g. a
+                // button block's href — so a personalized link doesn't leak an
+                // unresolved placeholder just because it isn't visible page text.
+                editor.editorArea.querySelectorAll<HTMLElement>('*').forEach(el => {
+                    Array.from(el.attributes).forEach(attr => {
+                        if (/\{\{.+?\}\}/.test(attr.value)) {
+                            const replaced = attr.value.replace(/\{\{(.+?)\}\}/g, (_, key) => {
+                                return sampleData[key.trim()] || `{{${key}}}`;
+                            });
+                            el.setAttribute(attr.name, replaced);
+                        }
+                    });
+                });
+
                 // Hide toolbar, show exit button
                 editor.toolbar.style.display = 'none';
                 editor.editorArea.contentEditable = 'false';

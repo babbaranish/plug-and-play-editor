@@ -531,12 +531,173 @@
     font-size: inherit;
 }
 
-.play-editor-source-view {
-    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace !important;
-    font-size: 13px !important;
-    white-space: pre-wrap;
-    background: #1e293b !important;
-    color: #e2e8f0 !important;
+/* ── Source Code View (line numbers, syntax highlighting, folding) ──── */
+.play-editor-source-root {
+    display: flex;
+    flex-direction: column;
+    height: 420px;
+    max-height: 60vh;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #1e293b;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 13px;
+}
+
+.play-editor-source-header {
+    flex: 0 0 auto;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 6px 8px;
+    border-bottom: 1px solid #334155;
+}
+
+.play-editor-source-wrapper {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    line-height: 20px;
+}
+
+.play-editor-source-format-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid #334155;
+    border-radius: 5px;
+    background: #1e293b;
+    color: #94a3b8;
+    cursor: pointer;
+}
+
+.play-editor-source-format-btn:hover {
+    background: #334155;
+    color: #e2e8f0;
+}
+
+.play-editor-source-format-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.play-editor-source-gutter {
+    flex: 0 0 auto;
+    min-width: 3.5em;
+    overflow: hidden;
+    user-select: none;
+    background: #16213a;
+    color: #64748b;
+    border-right: 1px solid #334155;
+    box-sizing: border-box;
+    padding: 8px 0;
+}
+
+.play-editor-source-gutter-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 2px;
+    height: 20px;
+    line-height: 20px;
+    padding: 0 8px;
+    white-space: nowrap;
+}
+
+.play-editor-fold-toggle {
+    width: 12px;
+    height: 12px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 9px;
+    line-height: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.play-editor-fold-toggle:hover {
+    color: #e2e8f0;
+}
+
+.play-editor-fold-toggle::before {
+    content: '▾';
+}
+
+.play-editor-fold-toggle.play-editor-fold-collapsed::before {
+    content: '▸';
+}
+
+.play-editor-fold-spacer {
+    width: 12px;
+    height: 12px;
+    display: inline-block;
+}
+
+.play-editor-line-num {
+    min-width: 2em;
+    text-align: right;
+}
+
+.play-editor-source-codearea {
+    position: relative;
+    flex: 1 1 auto;
+    overflow: hidden;
+}
+
+.play-editor-source-highlight,
+.play-editor-source-textarea {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 8px 12px;
+    border: none;
+    box-sizing: border-box;
+    white-space: pre;
+    font: inherit;
+    line-height: 20px;
+    overflow: hidden;
+}
+
+.play-editor-source-highlight {
+    color: #e2e8f0;
+    pointer-events: none;
+}
+
+.play-editor-source-textarea {
+    width: 100%;
+    height: 100%;
+    resize: none;
+    background: transparent;
+    color: transparent;
+    caret-color: #e2e8f0;
+    outline: none;
+    overflow: auto;
+    z-index: 1;
+}
+
+.play-editor-source-textarea::selection {
+    background: rgba(59, 130, 246, .4);
+}
+
+.pe-tok-tag { color: #f472b6; }
+.pe-tok-attr-name { color: #7dd3fc; }
+.pe-tok-attr-value { color: #a5d6a7; }
+.pe-tok-bracket { color: #94a3b8; }
+.pe-tok-comment { color: #64748b; font-style: italic; }
+.pe-tok-text { color: #e2e8f0; }
+
+/* ── Drag & Drop Image ─────────────────────────────────────────── */
+.play-editor-dragover {
+    outline: 2px dashed var(--pe-accent);
+    outline-offset: -2px;
+    background: rgba(59, 130, 246, 0.06);
 }
 
 .play-editor-btn-active {
@@ -990,6 +1151,37 @@
 .play-editor-button-popup-input-sm {
     width: 100%;
     min-width: 0;
+}
+
+.play-editor-button-popup-field-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.play-editor-button-popup-field-row .play-editor-button-popup-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.play-editor-button-popup-token-select {
+    flex: 0 0 auto;
+    width: 34px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid var(--pe-border);
+    border-radius: 8px;
+    background: var(--pe-bg);
+    color: var(--pe-text-muted);
+    font-size: 11px;
+    font-family: inherit;
+    text-align: center;
+    text-align-last: center;
+    cursor: pointer;
+}
+
+.play-editor-button-popup-token-select:hover {
+    background: var(--pe-btn-hover);
 }
 
 .play-editor-button-popup-color {

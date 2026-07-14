@@ -13,6 +13,7 @@ import { AccordionPlugin } from './plugins/accordion';
 import { PageBreakPlugin } from './plugins/page-break';
 import { TocPlugin } from './plugins/toc';
 import { PasteImagePlugin } from './plugins/paste-image';
+import { DragDropImagePlugin } from './plugins/drag-drop-image';
 import { MentionsPlugin } from './plugins/mentions';
 import { CodeBlockPlugin } from './plugins/code-block';
 import { DateTimePlugin } from './plugins/datetime';
@@ -46,6 +47,7 @@ const ALL_PLUGINS: Plugin[] = [
     PageBreakPlugin,
     TocPlugin,
     PasteImagePlugin,
+    DragDropImagePlugin,
     MentionsPlugin,
     CodeBlockPlugin,
     DateTimePlugin,
