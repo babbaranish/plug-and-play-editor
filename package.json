@@ -1,7 +1,7 @@
 {
   "name": "plug-and-play-editor",
   "private": false,
-  "version": "0.4.1",
+  "version": "0.6.3",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
@@ -17,16 +17,28 @@
       "import": "./dist/react.mjs",
       "require": "./dist/react.cjs"
     },
+    "./react/defaults": {
+      "types": "./dist/react-defaults.d.ts",
+      "import": "./dist/react-defaults.mjs",
+      "require": "./dist/react-defaults.cjs"
+    },
     "./style.css": "./dist/plug-and-play-editor.css",
     "./dist/*": "./dist/*"
   },
   "files": [
-    "dist"
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "sideEffects": [
+    "**/*.css",
+    "./dist/plug-and-play-editor.css"
   ],
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "peerDependencies": {
     "react": ">=17.0.0",
@@ -44,11 +56,10 @@
     "@types/node": "^25.3.2",
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.6",
+    "happy-dom": "^20.10.6",
     "typescript": "~5.9.3",
     "vite": "^7.3.1",
-    "vite-plugin-dts": "^4.5.4"
-  },
-  "dependencies": {
-    "lucide": "^0.575.0"
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "^4.1.10"
   }
 }

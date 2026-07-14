@@ -1,14 +1,45 @@
 import type { Plugin } from './Plugin';
+import { readSelection, writeSelection, domToPoint } from './selection';
+import type { Point, Selection } from './selection';
+import { parseDom, render, serializeToHtml } from './document';
+import type { Doc, RenderResult } from './document';
+import { TransformLog, startRecording, apply as applyTransform } from './transforms';
+import type { ObserverHandle, Transform, TransformLogEntry } from './transforms';
+
+/**
+ * Constructor options. All optional — the editor is fully functional
+ * without any of them.
+ */
+export interface EditorOptions {
+    /**
+     * If true, the editor spins up a MutationObserver-backed recorder
+     * that captures every DOM mutation as a coarse `replace-node`
+     * transform in `editor.transforms`. Off by default because it
+     * adds a small per-edit cost for consumers who don't need it.
+     */
+    readonly recordTransforms?: boolean;
+    /** Custom transform log capacity (default 256). */
+    readonly transformLogCapacity?: number;
+}
 
 export class Editor {
     public container: HTMLElement;
     public textArea: HTMLTextAreaElement;
     public editorArea: HTMLDivElement;
     public toolbar: HTMLDivElement;
+    /** Canonical undo/redo log (populated when `recordTransforms: true`). */
+    public readonly transforms: TransformLog;
     private plugins: Map<string, Plugin> = new Map();
     private cleanupFns: (() => void)[] = [];
+    private commandButtons: { btn: HTMLButtonElement; command: string }[] = [];
+    private selectionSubs: (() => void)[] = [];
+    private inputSubs: (() => void)[] = [];
+    private selectionFramePending = false;
+    private inputFramePending = false;
+    private recorderHandle: ObserverHandle | null = null;
+    private recorderPaused = false;
 
-    constructor(selector: string | HTMLTextAreaElement, plugins: Plugin[] = []) {
+    constructor(selector: string | HTMLTextAreaElement, plugins: Plugin[] = [], options: EditorOptions = {}) {
         const el =
             typeof selector === 'string'
                 ? (document.querySelector(selector) as HTMLTextAreaElement)
@@ -37,7 +68,15 @@ export class Editor {
         this.editorArea.setAttribute('aria-label', 'Editor content');
         this.editorArea.innerHTML = this.textArea.value;
 
+        this.transforms = new TransformLog({ capacity: options.transformLogCapacity });
+
         this.init(plugins);
+
+        if (options.recordTransforms) {
+            this.recorderHandle = startRecording(this.editorArea, this.transforms, {
+                isPaused: () => this.recorderPaused
+            });
+        }
     }
 
     private init(plugins: Plugin[]) {
@@ -46,9 +85,16 @@ export class Editor {
         this.container.appendChild(this.toolbar);
         this.container.appendChild(this.editorArea);
 
-        // Sync content back to textarea on input
+        // Sync content back to textarea on input + dispatch rAF-coalesced subscribers
         const onInput = () => {
             this.textArea.value = this.editorArea.innerHTML;
+            if (this.inputSubs.length && !this.inputFramePending) {
+                this.inputFramePending = true;
+                requestAnimationFrame(() => {
+                    this.inputFramePending = false;
+                    for (const fn of this.inputSubs) fn();
+                });
+            }
         };
         this.editorArea.addEventListener('input', onInput);
         this.cleanupFns.push(() => this.editorArea.removeEventListener('input', onInput));
@@ -104,9 +150,18 @@ export class Editor {
         this.editorArea.addEventListener('keydown', onShortcut);
         this.cleanupFns.push(() => this.editorArea.removeEventListener('keydown', onShortcut));
 
-        // Update active button states on selection change
+        // Single rAF-coalesced selectionchange dispatcher shared across editor + plugins.
+        // The new structured selection API (readSelection) returns { kind: 'none' } when
+        // the browser selection is outside the editor, so we use that as our gate.
         const onSelectionChange = () => {
-            this.updateActiveStates();
+            if (this.selectionFramePending) return;
+            this.selectionFramePending = true;
+            requestAnimationFrame(() => {
+                this.selectionFramePending = false;
+                if (this.getSelection().kind === 'none') return;
+                this.updateActiveStates();
+                for (const fn of this.selectionSubs) fn();
+            });
         };
         document.addEventListener('selectionchange', onSelectionChange);
         this.cleanupFns.push(() => document.removeEventListener('selectionchange', onSelectionChange));
@@ -123,31 +178,23 @@ export class Editor {
     }
 
     private updateActiveStates() {
-        // Only update if our editor is focused
-        const sel = window.getSelection();
-        if (!sel || sel.rangeCount === 0) return;
-        if (!this.editorArea.contains(sel.anchorNode)) return;
-
-        this.toolbar.querySelectorAll<HTMLButtonElement>('.play-editor-btn[data-command]').forEach(btn => {
-            const command = btn.dataset.command!;
+        // Selection is already verified to be inside the editor by the dispatcher.
+        // Iterate the cached command-button list instead of re-querying the DOM.
+        for (let i = 0; i < this.commandButtons.length; i++) {
+            const { btn, command } = this.commandButtons[i];
             try {
                 const active = document.queryCommandState(command);
                 btn.classList.toggle('play-editor-btn-active', active);
             } catch {
                 // queryCommandState can throw for unsupported commands
             }
-        });
+        }
     }
 
     public execCommand(command: string, value: string | undefined = undefined) {
         this.editorArea.focus();
         document.execCommand(command, false, value);
         this.syncContent();
-    }
-
-    /** @deprecated Use execCommand instead. Kept for backwards compatibility. */
-    public exec(command: string, value: string | undefined = undefined) {
-        this.execCommand(command, value);
     }
 
     public addToolbarButton(iconHtml: string, tooltip: string, onClick: () => void, command?: string, target?: HTMLElement) {
@@ -160,6 +207,7 @@ export class Editor {
         btn.innerHTML = iconHtml;
         if (command) {
             btn.dataset.command = command;
+            this.commandButtons.push({ btn, command });
         }
         btn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -299,8 +347,142 @@ export class Editor {
         this.cleanupFns.push(fn);
     }
 
+    /**
+     * Read the current browser selection and resolve it into a structured
+     * {@link Selection} relative to `editorArea`. Returns `{ kind: 'none' }`
+     * when the selection is empty or outside the editor.
+     */
+    public getSelection(): Selection {
+        return readSelection(this.editorArea);
+    }
+
+    /**
+     * Apply a structured {@link Selection} back to the DOM. Throws if the
+     * selection refers to a path that no longer resolves.
+     *
+     * Does NOT focus the editor. Caller should call `editor.editorArea.focus()`
+     * first when focus is desired.
+     */
+    public setSelection(sel: Selection): void {
+        writeSelection(this.editorArea, sel);
+    }
+
+    /**
+     * Resolve a DOM (node, offset) pair to a structured {@link Point}
+     * relative to `editorArea`. Returns `null` when the node is not in
+     * the editor.
+     */
+    public resolvePoint(node: Node, offset: number): Point | null {
+        return domToPoint(this.editorArea, node, offset);
+    }
+
+    /**
+     * Parse the editor's current DOM into a structured {@link Doc}. The
+     * Doc is a snapshot — it is not retained; call again to re-parse
+     * after further edits.
+     */
+    public parseDoc(): Doc {
+        return parseDom(this.editorArea);
+    }
+
+    /**
+     * Serialise a {@link Doc} to HTML. Pure — does not touch the editor.
+     */
+    public serializeDoc(docNode: Doc): string {
+        return serializeToHtml(docNode);
+    }
+
+    /**
+     * Render a {@link Doc} into the editor via the diffing renderer.
+     * Unchanged subtrees are preserved; only the differences are
+     * mutated, so caret position and DOM focus survive unchanged regions.
+     *
+     * Recording is paused for the duration of the render so the
+     * reconciliation isn't itself captured as a transform.
+     */
+    public renderDoc(docNode: Doc): RenderResult {
+        const wasPaused = this.recorderPaused;
+        this.recorderPaused = true;
+        try {
+            const result = render(this.editorArea, docNode);
+            this.textArea.value = this.editorArea.innerHTML;
+            return result;
+        } finally {
+            this.recorderPaused = wasPaused;
+        }
+    }
+
+    /**
+     * Apply a structured {@link Transform} to the current document and
+     * reconcile it back into the DOM, pushing the transform onto
+     * {@link transforms}. Use this as the preferred edit path when a
+     * plugin has a structured edit (vs. a `document.execCommand` call).
+     */
+    public applyTransform(transform: Transform, label?: string): TransformLogEntry {
+        const before = this.parseDoc();
+        const after = applyTransform(before, transform);
+        this.renderDoc(after);
+        return this.transforms.push(transform, label);
+    }
+
+    /**
+     * Step the transform log back one entry and reconcile the DOM.
+     * Returns the entry that was undone, or null when the log is empty.
+     */
+    public undoTransform(): TransformLogEntry | null {
+        const entry = this.transforms.stepUndo();
+        if (!entry) return null;
+        const before = this.parseDoc();
+        const after = applyTransform(before, entry.inverse);
+        this.renderDoc(after);
+        return entry;
+    }
+
+    /** Step the transform log forward one entry and reconcile the DOM. */
+    public redoTransform(): TransformLogEntry | null {
+        const entry = this.transforms.stepRedo();
+        if (!entry) return null;
+        const before = this.parseDoc();
+        const after = applyTransform(before, entry.transform);
+        this.renderDoc(after);
+        return entry;
+    }
+
+    /**
+     * Subscribe to selection changes inside the editor.
+     * Handler is invoked rAF-coalesced and only when the selection is inside the editor.
+     * Returns an unsubscribe function.
+     */
+    public onSelectionChange(fn: () => void): () => void {
+        this.selectionSubs.push(fn);
+        return () => {
+            const i = this.selectionSubs.indexOf(fn);
+            if (i !== -1) this.selectionSubs.splice(i, 1);
+        };
+    }
+
+    /**
+     * Subscribe to editor content input events.
+     * Handler is invoked rAF-coalesced after the textarea sync.
+     * Returns an unsubscribe function.
+     */
+    public onInput(fn: () => void): () => void {
+        this.inputSubs.push(fn);
+        return () => {
+            const i = this.inputSubs.indexOf(fn);
+            if (i !== -1) this.inputSubs.splice(i, 1);
+        };
+    }
+
     /** Tear down the editor, remove DOM elements, and clean up all plugins */
     public destroy() {
+        // Stop transform recording before plugin teardown so observer mutations
+        // produced by cleanup don't get captured as phantom edits.
+        if (this.recorderHandle) {
+            this.recorderHandle.stop();
+            this.recorderHandle = null;
+        }
+
         // Destroy plugins
         this.plugins.forEach(p => p.destroy?.());
         this.plugins.clear();

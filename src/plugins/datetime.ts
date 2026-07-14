@@ -15,7 +15,7 @@ export const DateTimePlugin: Plugin = {
                 month: 'long',
                 day: 'numeric',
             });
-            editor.exec('insertHTML', `<time class="play-editor-datetime" datetime="${now.toISOString()}">${date}</time>`);
+            editor.execCommand('insertHTML', `<time class="play-editor-datetime" datetime="${now.toISOString()}">${date}</time>`);
         });
 
         // Insert Time
@@ -25,7 +25,7 @@ export const DateTimePlugin: Plugin = {
                 hour: '2-digit',
                 minute: '2-digit',
             });
-            editor.exec('insertHTML', `<time class="play-editor-datetime" datetime="${now.toISOString()}">${time}</time>`);
+            editor.execCommand('insertHTML', `<time class="play-editor-datetime" datetime="${now.toISOString()}">${time}</time>`);
         });
     }
 };

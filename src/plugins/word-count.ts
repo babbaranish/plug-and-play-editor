@@ -1,5 +1,6 @@
 import type { Plugin } from '../core/Plugin';
 import type { Editor } from '../core/Editor';
+import { comparePoints } from '../core/selection';
 
 export const WordCountPlugin: Plugin = {
     name: 'word-count',
@@ -9,7 +10,6 @@ export const WordCountPlugin: Plugin = {
         statusBar.setAttribute('aria-live', 'polite');
         statusBar.setAttribute('aria-label', 'Editor statistics');
 
-        // Inline styles
         statusBar.style.padding = '6px 16px';
         statusBar.style.borderTop = '1px solid var(--pe-border)';
         statusBar.style.background = 'var(--pe-toolbar-bg)';
@@ -23,9 +23,9 @@ export const WordCountPlugin: Plugin = {
 
         editor.container.appendChild(statusBar);
 
-        function getTextContent(): string {
-            return editor.editorArea.textContent || editor.editorArea.innerText || '';
-        }
+        let cachedText = '';
+        let cachedWords = 0;
+        let cachedChars = 0;
 
         function countWords(text: string): number {
             const trimmed = text.trim();
@@ -33,49 +33,60 @@ export const WordCountPlugin: Plugin = {
             return trimmed.split(/\s+/).length;
         }
 
-        function countChars(text: string): number {
-            return text.length;
+        function refreshTextStats() {
+            const text = editor.editorArea.textContent || '';
+            if (text === cachedText) return;
+            cachedText = text;
+            cachedChars = text.length;
+            cachedWords = countWords(text);
         }
 
+        /**
+         * Selection text length derived from the structured selection. The
+         * browser's `Selection.toString()` has inconsistent newline handling
+         * across browsers; we still need it for the actual text *value* (for
+         * word counting), but the *character* count can be derived from a
+         * simpler source — the textContent slice between the anchor and focus
+         * Points.
+         */
         function getSelectedText(): string {
-            const sel = window.getSelection();
-            if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return '';
-            if (!editor.editorArea.contains(sel.anchorNode)) return '';
-            return sel.toString();
+            const sel = editor.getSelection();
+            if (sel.kind !== 'range') return '';
+            if (comparePoints(sel.anchor, sel.focus) === 0) return '';
+            const live = window.getSelection();
+            if (!live) return '';
+            return live.toString();
         }
 
-        function update() {
-            const text = getTextContent();
-            const words = countWords(text);
-            const chars = countChars(text);
-
+        function render() {
             const selectedText = getSelectedText();
-
-            if (selectedText && selectedText.length > 0) {
+            if (selectedText) {
                 const selWords = countWords(selectedText);
-                const selChars = countChars(selectedText);
-                statusBar.textContent = `${selWords} of ${words} words selected | ${selChars} of ${chars} characters selected`;
+                const selChars = selectedText.length;
+                statusBar.textContent = `${selWords} of ${cachedWords} words selected | ${selChars} of ${cachedChars} characters selected`;
             } else {
-                statusBar.textContent = `${words} words | ${chars} characters`;
+                statusBar.textContent = `${cachedWords} words | ${cachedChars} characters`;
             }
         }
 
-        const onInput = () => update();
-        editor.editorArea.addEventListener('input', onInput);
+        const onInput = () => {
+            refreshTextStats();
+            render();
+        };
 
         const onSelectionChange = () => {
-            if (!editor.editorArea.contains(document.activeElement)) return;
-            update();
+            render();
         };
-        document.addEventListener('selectionchange', onSelectionChange);
 
-        // Initial count
-        update();
+        const unsubInput = editor.onInput(onInput);
+        const unsubSel = editor.onSelectionChange(onSelectionChange);
 
-        // Cleanup
+        refreshTextStats();
+        render();
+
         editor.onDestroy(() => {
-            editor.editorArea.removeEventListener('input', onInput);
-            document.removeEventListener('selectionchange', onSelectionChange);
+            unsubInput();
+            unsubSel();
             statusBar.remove();
         });
     }

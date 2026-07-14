@@ -97,7 +97,7 @@ export const PasteCleanupPlugin: Plugin = {
 
             e.preventDefault();
             const cleaned = cleanHtml(html);
-            editor.exec('insertHTML', cleaned);
+            editor.execCommand('insertHTML', cleaned);
         };
 
         const keydownHandler = (e: KeyboardEvent) => {
@@ -106,7 +106,7 @@ export const PasteCleanupPlugin: Plugin = {
                 e.preventDefault();
                 navigator.clipboard.readText().then(text => {
                     if (text) {
-                        editor.exec('insertText', text);
+                        editor.execCommand('insertText', text);
                     }
                 }).catch(() => {
                     // Clipboard API not available, silently fail

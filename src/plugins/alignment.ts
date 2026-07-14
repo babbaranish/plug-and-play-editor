@@ -8,19 +8,19 @@ export const AlignmentPlugin: Plugin = {
         editor.addToolbarDivider();
 
         editor.addToolbarButton(icons.alignLeft, 'Align Left', () => {
-            editor.exec('justifyLeft');
+            editor.execCommand('justifyLeft');
         });
 
         editor.addToolbarButton(icons.alignCenter, 'Align Center', () => {
-            editor.exec('justifyCenter');
+            editor.execCommand('justifyCenter');
         });
 
         editor.addToolbarButton(icons.alignRight, 'Align Right', () => {
-            editor.exec('justifyRight');
+            editor.execCommand('justifyRight');
         });
 
         editor.addToolbarButton(icons.alignJustify, 'Justify', () => {
-            editor.exec('justifyFull');
+            editor.execCommand('justifyFull');
         });
     }
 };
