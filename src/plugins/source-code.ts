@@ -39,6 +39,7 @@ export const SourceCodePlugin: Plugin = {
         let gutterEl: HTMLDivElement | null = null;
         let highlightEl: HTMLElement | null = null;
         let textarea: HTMLTextAreaElement | null = null;
+        let unregisterContentSource: (() => void) | null = null;
 
         function getOtherToolbarControls(): (HTMLButtonElement | HTMLSelectElement | HTMLInputElement)[] {
             const all = editor.toolbar.querySelectorAll<HTMLButtonElement | HTMLSelectElement | HTMLInputElement>(
@@ -184,7 +185,10 @@ export const SourceCodePlugin: Plugin = {
             textarea.setAttribute('aria-label', 'HTML source code');
             textarea.value = formatted;
 
-            textarea.addEventListener('input', render);
+            textarea.addEventListener('input', () => {
+                render();
+                editor.notifyContentChange();
+            });
             textarea.addEventListener('scroll', syncScroll);
             textarea.addEventListener('mousedown', expandAllFolds);
             textarea.addEventListener('focus', expandAllFolds);
@@ -227,6 +231,10 @@ export const SourceCodePlugin: Plugin = {
             editor.container.appendChild(buildSourceView(formatted));
             btn.classList.add('play-editor-btn-active');
 
+            // getContent()/onChange/onInput must reflect the textarea while it's
+            // the real source of truth, not the (now hidden, stale) editorArea.
+            unregisterContentSource = editor.registerContentSource(() => textarea?.value ?? '');
+
             const controls = getOtherToolbarControls();
             controls.forEach(el => {
                 el.setAttribute('data-pe-was-disabled', el.disabled ? 'true' : 'false');
@@ -241,6 +249,8 @@ export const SourceCodePlugin: Plugin = {
             expandAllFolds();
 
             editor.setContent(textarea?.value ?? '');
+            unregisterContentSource?.();
+            unregisterContentSource = null;
 
             wrapper?.remove();
             wrapper = null;

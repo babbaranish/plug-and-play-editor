@@ -5,6 +5,33 @@ format follows [Keep a Changelog](https://keepachangelog.com/), and the
 project adheres to [Semantic Versioning](https://semver.org/) while
 pre-1.0 (minor versions may contain breaking changes).
 
+## [0.7.1] - 2026-07-21
+
+### Fixed
+
+- **`getContent()` / `onInput()` / `PlayEditor`'s `onChange` didn't see
+  content from "alternate view" plugins.** While `SourceCodePlugin`'s
+  raw-HTML view was open, typing never reached `onInput`/`onChange` at
+  all (its content lives in a separate `<textarea>`, not `editorArea`),
+  and `getContent()` returned stale/wrong HTML until the view was
+  closed. `CodeBlockPlugin`'s "Toggle HTML Source" had the same class
+  of bug more mildly — `getContent()` returned the HTML-escaped
+  *display* text instead of real markup while that mode was on.
+
+### Added
+
+- `Editor.registerContentSource(getRawContent): () => void` — lets a
+  plugin declare itself the current source of truth for content when
+  it lives outside `editorArea` or in a transformed representation
+  inside it. `getContent()` and the textarea sync use it when present.
+- `Editor.notifyContentChange(): void` — tells the editor content
+  changed without a native `editorArea` input event (e.g. typing in a
+  plugin's own view). Fires the same rAF-coalesced `onInput`
+  subscribers and dispatches a marked synthetic `input` event on
+  `editorArea` so anything wired to that native event (like
+  `PlayEditor`'s `onChange`) fires too. Both `SourceCodePlugin` and
+  `CodeBlockPlugin`'s source toggle now use this.
+
 ## [0.7.0] - 2026-07-14
 
 ### Added

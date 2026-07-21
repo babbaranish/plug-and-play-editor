@@ -38,6 +38,13 @@ export class Editor {
     private inputFramePending = false;
     private recorderHandle: ObserverHandle | null = null;
     private recorderPaused = false;
+    /**
+     * When a plugin represents content outside `editorArea` (or inside it in a
+     * transformed form) — e.g. SourceCodePlugin's raw-HTML textarea — it
+     * registers itself here so getContent()/notifyContentChange() reflect the
+     * real current content instead of `editorArea.innerHTML`.
+     */
+    private activeContentSource: (() => string) | null = null;
 
     constructor(selector: string | HTMLTextAreaElement, plugins: Plugin[] = [], options: EditorOptions = {}) {
         const el =
@@ -85,9 +92,12 @@ export class Editor {
         this.container.appendChild(this.toolbar);
         this.container.appendChild(this.editorArea);
 
-        // Sync content back to textarea on input + dispatch rAF-coalesced subscribers
+        // Sync content back to textarea on input + dispatch rAF-coalesced subscribers.
+        // Also fires for the synthetic event notifyContentChange() dispatches, so this
+        // reads through activeContentSource when a plugin (e.g. SourceCodePlugin) has
+        // registered one — otherwise this would sync stale/transformed editorArea.innerHTML.
         const onInput = () => {
-            this.textArea.value = this.editorArea.innerHTML;
+            this.textArea.value = this.activeContentSource ? this.activeContentSource() : this.editorArea.innerHTML;
             if (this.inputSubs.length && !this.inputFramePending) {
                 this.inputFramePending = true;
                 requestAnimationFrame(() => {
@@ -334,7 +344,7 @@ export class Editor {
     }
 
     public getContent(): string {
-        return this.editorArea.innerHTML;
+        return this.activeContentSource ? this.activeContentSource() : this.editorArea.innerHTML;
     }
 
     public setContent(html: string) {
@@ -345,6 +355,45 @@ export class Editor {
     /** Register a cleanup function to be called on destroy */
     public onDestroy(fn: () => void) {
         this.cleanupFns.push(fn);
+    }
+
+    /**
+     * Register a plugin as the current source of truth for content — for
+     * when content temporarily lives outside `editorArea` (e.g. a raw-HTML
+     * `<textarea>`) or inside it in a transformed representation (e.g.
+     * plain-text-as-display). While registered, getContent() and the
+     * textarea sync return `getRawContent()` instead of `editorArea.innerHTML`.
+     *
+     * Only one source is tracked at a time — the most recently registered.
+     * Returns an unregister function; call it when the plugin's alternate
+     * view closes. Unregistering a source that's no longer the active one
+     * (e.g. it was already superseded) is a safe no-op.
+     */
+    public registerContentSource(getRawContent: () => string): () => void {
+        this.activeContentSource = getRawContent;
+        return () => {
+            if (this.activeContentSource === getRawContent) {
+                this.activeContentSource = null;
+            }
+        };
+    }
+
+    /**
+     * Tell the editor content changed without a native `editorArea` input
+     * event having fired — e.g. typing inside a plugin's own alternate
+     * content view. Runs the same dispatch path a real edit takes (rAF-
+     * coalesced `onInput` subscribers, textarea sync) by firing a marked
+     * synthetic `input` event on `editorArea`, so anything wired to that
+     * native event (like `PlayEditor`'s `onChange` prop) fires too.
+     *
+     * If a plugin also listens for native `input` on `editorArea` itself
+     * (as opposed to a separate element) and calls this from that listener,
+     * it must ignore events carrying `__peSynthetic` to avoid recursing.
+     */
+    public notifyContentChange(): void {
+        const evt = new Event('input', { bubbles: true }) as Event & { __peSynthetic?: boolean };
+        evt.__peSynthetic = true;
+        this.editorArea.dispatchEvent(evt);
     }
 
     /**
