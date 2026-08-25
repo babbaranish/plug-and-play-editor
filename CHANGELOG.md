@@ -5,6 +5,20 @@ format follows [Keep a Changelog](https://keepachangelog.com/), and the
 project adheres to [Semantic Versioning](https://semver.org/) while
 pre-1.0 (minor versions may contain breaking changes).
 
+## [0.7.2] - 2026-08-25
+
+### Fixed
+
+- **`SourceCodePlugin` no longer reformats your markup when the source
+  view opens.** Entering the HTML source view pretty-printed
+  `editorArea.innerHTML` automatically, so simply looking at the source
+  rewrote indentation and line breaks whether you wanted it or not. The
+  view now opens with the editor's HTML exactly as stored; the Format
+  button in the source header is the only thing that re-indents it.
+  Note that code folding keys off the 2-space indentation the formatter
+  produces, so fold toggles appear in the gutter once the source has
+  been formatted.
+
 ## [0.7.1] - 2026-07-21
 
 ### Fixed

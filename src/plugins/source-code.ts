@@ -146,7 +146,7 @@ export const SourceCodePlugin: Plugin = {
             textarea.focus();
         }
 
-        function buildSourceView(formatted: string): HTMLDivElement {
+        function buildSourceView(initialSource: string): HTMLDivElement {
             wrapper = document.createElement('div');
             wrapper.className = 'play-editor-source-root';
 
@@ -183,7 +183,7 @@ export const SourceCodePlugin: Plugin = {
             textarea.setAttribute('autocomplete', 'off');
             textarea.setAttribute('autocapitalize', 'off');
             textarea.setAttribute('aria-label', 'HTML source code');
-            textarea.value = formatted;
+            textarea.value = initialSource;
 
             textarea.addEventListener('input', () => {
                 render();
@@ -225,10 +225,13 @@ export const SourceCodePlugin: Plugin = {
             isSourceMode = true;
             foldStore = new Map();
 
-            const formatted = formatHtml(editor.editorArea.innerHTML);
+            // The source opens exactly as the editor stores it. Pretty-printing is
+            // a deliberate action via the Format button, never something that
+            // rewrites the user's markup behind their back on entry.
+            const source = editor.editorArea.innerHTML;
 
             editor.editorArea.style.display = 'none';
-            editor.container.appendChild(buildSourceView(formatted));
+            editor.container.appendChild(buildSourceView(source));
             btn.classList.add('play-editor-btn-active');
 
             // getContent()/onChange/onInput must reflect the textarea while it's
