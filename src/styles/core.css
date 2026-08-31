@@ -1471,3 +1471,63 @@ select.play-editor-modal-input {
         padding: 16px 8px;
     }
 }
+
+/* ── Link Hover Bubble ─────────────────────────────────────────── */
+.play-editor-link-bubble {
+    position: absolute;
+    z-index: 90;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    max-width: min(420px, 100%);
+    padding: 4px 4px 4px 10px;
+    background: var(--pe-bg);
+    border: 1px solid var(--pe-border);
+    border-radius: 8px;
+    box-shadow: var(--pe-shadow-lg);
+    font-family: var(--pe-font);
+    font-size: 12px;
+    color: var(--pe-text);
+}
+
+.play-editor-link-bubble-url {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--pe-text-muted);
+    direction: ltr;
+    unicode-bidi: plaintext;
+}
+
+.play-editor-link-bubble-btn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--pe-text-muted);
+    cursor: pointer;
+}
+
+.play-editor-link-bubble-btn:hover {
+    background: var(--pe-btn-hover);
+    color: var(--pe-text);
+}
+
+.play-editor-link-bubble-btn:focus-visible {
+    outline: 2px solid var(--pe-focus);
+    outline-offset: -2px;
+}
+
+.play-editor-link-bubble-btn svg {
+    width: 14px;
+    height: 14px;
+}

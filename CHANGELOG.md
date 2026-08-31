@@ -5,6 +5,52 @@ format follows [Keep a Changelog](https://keepachangelog.com/), and the
 project adheres to [Semantic Versioning](https://semver.org/) while
 pre-1.0 (minor versions may contain breaking changes).
 
+## [0.8.0] - 2026-08-31
+
+### Added
+
+- **Edit links without opening the source view.** Hovering a link in the
+  editor now shows a small bubble with its URL and Open / Edit / Remove
+  actions; double-clicking a link opens the editor directly. The Edit
+  dialog carries a `{ }` variable picker on both the Link Text and Link
+  URL fields, so merge variables can be dropped into either without
+  hand-editing HTML. The bubble lives outside `editorArea`, so it never
+  appears in `getContent()`, and it stays out of the way of
+  `ButtonBlockPlugin`, which has its own editor for the anchor it owns.
+- `createLinksPlugin(options?)` and `LinksPluginOptions` — configures the
+  variable list and delimiter style offered by the link dialog, mirroring
+  `createButtonBlockPlugin`. `LinksPlugin` is still exported as a
+  pre-configured singleton using `DEFAULT_EMAIL_TOKENS`, so existing
+  usage is unchanged.
+- The toolbar's Insert Link dialog gained a Link Text field, so a link
+  can be created without selecting text first.
+
+### Fixed
+
+- **Link URLs may now contain merge variables.** URL validation used
+  `new URL()` alone, which rejected `{{unsubscribe_url}}` — a URL that
+  only becomes one at send time. Variables are now blanked out before
+  validating, and whatever literal text remains must still be a safe
+  http/https/mailto URL. A URL whose *scheme* comes from a variable is
+  accepted only when the remainder is a path, query or fragment, so an
+  empty expansion cannot leave a `javascript:` href behind.
+- **Typing in the source view dropped characters and appeared to move
+  the caret.** The syntax highlighter (added in 0.7.0) paints an overlay
+  beneath a transparent `<textarea>`, so every visible glyph comes from
+  the overlay while the caret comes from the textarea. Its tokenizer
+  *reconstructed* text instead of slicing it, and silently lost or added
+  characters: valueless attributes (`<td nowrap>`) and everything after
+  them were dropped, an attribute name stayed invisible until you typed
+  `=`, `<br/>` gained a space, and a `>` inside a quoted attribute value
+  truncated the tag — rendering `data-x="a>` as `data-x=>`. The visible
+  effects were vanishing keystrokes, blank gaps where characters should
+  be, a caret that looked misplaced, backspace that appeared dead, and
+  pasted markup that looked corrupted. `textarea.value` was always
+  correct, so stored HTML was never affected — only what was drawn. The
+  tokenizer now emits slices of the original source exclusively, making
+  drift structurally impossible, and respects quoted attribute values
+  when finding a tag's end.
+
 ## [0.7.2] - 2026-08-25
 
 ### Fixed
