@@ -9,6 +9,22 @@ pre-1.0 (minor versions may contain breaking changes).
 
 ### Added
 
+- **Link marks can carry a token-valued destination** (`hrefToken` on the
+  `link` mark). Some links point at something only the consuming system
+  can resolve — a per-recipient payment link, for example. Previously the
+  only way to express that was to type the token into the URL, where an
+  href percent-encodes it, it loses its identity, and nothing downstream
+  can tell it apart from an ordinary address. It now rides in its own
+  field, serialized to `data-href-token` on the anchor and read back off
+  it, so it survives a parse/serialize round trip intact while `href`
+  stays inert until something substitutes the real destination.
+  `hrefToken` is optional and absent on ordinary links, so existing
+  documents and consumers are unaffected.
+
+## [0.9.0] - 2026-09-03
+
+### Added
+
 - **A link's destination can be a token.** The `link` mark gains an optional
   `hrefToken`, serialized to `data-href-token` on the anchor and read back by
   the parser, so it survives a full DOM round trip.
