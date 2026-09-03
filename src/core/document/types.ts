@@ -27,7 +27,22 @@ export type Mark =
     | { readonly type: 'underline' }
     | { readonly type: 'strike' }
     | { readonly type: 'code' }
-    | { readonly type: 'link'; readonly href: string; readonly target?: string; readonly rel?: string }
+    | {
+          readonly type: 'link';
+          readonly href: string;
+          readonly target?: string;
+          readonly rel?: string;
+          /**
+           * A token that supplies this link's destination, e.g. a payment link.
+           *
+           * An href holds text, so without this the only way to express "this
+           * link goes to a token" is to type the token into the URL — where it
+           * gets percent-encoded, loses its identity, and cannot be told apart
+           * from prose. Held as its own field it survives the DOM round trip
+           * intact, and `href` stays inert until something resolves the token.
+           */
+          readonly hrefToken?: string;
+      }
     | { readonly type: 'color'; readonly value: string }
     | { readonly type: 'background'; readonly value: string }
     | { readonly type: 'font-size'; readonly value: string }

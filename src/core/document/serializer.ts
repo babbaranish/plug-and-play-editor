@@ -234,6 +234,11 @@ function wrapOneMark(inner: DomNode, mark: Mark, target: Document): HTMLElement 
             a.href = mark.href;
             if (mark.target) a.target = mark.target;
             if (mark.rel) a.rel = mark.rel;
+            // The destination token rides in a data attribute rather than in the
+            // href, so it is never URL-encoded and never mistaken for prose.
+            // Whatever consumes the document substitutes it into href later; an
+            // unsubstituted link stays inert instead of pointing nowhere.
+            if (mark.hrefToken) a.dataset.hrefToken = mark.hrefToken;
             a.appendChild(inner);
             return a;
         }

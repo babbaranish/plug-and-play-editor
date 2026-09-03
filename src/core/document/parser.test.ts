@@ -158,6 +158,32 @@ describe('parseDom — inline marks', () => {
         );
     });
 
+    // A link whose destination is a token, e.g. a payment link in a fee email.
+    // Without a field of its own the token can only be typed into the href,
+    // where a URL field percent-encodes it, it loses its identity, and nothing
+    // downstream can tell it apart from an ordinary address.
+    it('reads a token-valued link destination off the anchor', () => {
+        const parsed = parseDom(
+            domFrom('<p><a href="#" data-href-token="Fee:abc:link-1:PaymentLink">Pay</a></p>')
+        );
+        expect(parsed).toEqual(
+            doc([
+                paragraph([
+                    text('Pay', [
+                        { type: 'link', href: '#', hrefToken: 'Fee:abc:link-1:PaymentLink' }
+                    ])
+                ])
+            ])
+        );
+    });
+
+    it('leaves hrefToken undefined on an ordinary link', () => {
+        const parsed = parseDom(domFrom('<p><a href="https://x.test">x</a></p>'));
+        expect(parsed).toEqual(
+            doc([paragraph([text('x', [{ type: 'link', href: 'https://x.test' }])])])
+        );
+    });
+
     it('preserves target/rel on link marks', () => {
         const parsed = parseDom(
             domFrom('<p><a href="https://x.test" target="_blank" rel="noopener">x</a></p>')
@@ -251,6 +277,29 @@ describe('serializeToHtml — fixtures', () => {
         expect(
             serializeToHtml(doc([paragraph([text('bold', [{ type: 'bold' }])])]))
         ).toBe('<p><strong>bold</strong></p>');
+    });
+
+    it('serializes a token-valued link destination to a data attribute', () => {
+        const html = serializeToHtml(
+            doc([
+                paragraph([
+                    text('Pay', [
+                        { type: 'link', href: '#', hrefToken: 'Fee:abc:link-1:PaymentLink' }
+                    ])
+                ])
+            ])
+        );
+        expect(html).toContain('data-href-token="Fee:abc:link-1:PaymentLink"');
+        // The token is NEVER written into the href: that is the whole point.
+        expect(html).not.toContain('href="Fee:abc:link-1:PaymentLink"');
+    });
+
+    it('survives a full DOM round trip, which is where identity used to be lost', () => {
+        const original = '<p><a href="#" data-href-token="Fee:abc:link-1:PaymentLink">Pay</a></p>';
+        const once = serializeToHtml(parseDom(domFrom(original)));
+        const twice = serializeToHtml(parseDom(domFrom(once)));
+        expect(once).toContain('data-href-token="Fee:abc:link-1:PaymentLink"');
+        expect(twice).toBe(once);
     });
 
     it('serializes a link mark', () => {

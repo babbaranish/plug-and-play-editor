@@ -259,7 +259,11 @@ function inlineFromNode(node: Node, accumulatedMarks: readonly Mark[] = []): Inl
                 type: 'link',
                 href,
                 target: el.getAttribute('target') || undefined,
-                rel: el.getAttribute('rel') || undefined
+                rel: el.getAttribute('rel') || undefined,
+                // Read back so a token-valued destination survives a round trip.
+                // Without this the AST forgets it and the serializer writes only
+                // the inert href, which silently drops the link's destination.
+                hrefToken: el.dataset.hrefToken || undefined
             };
             return collectInline(el, addMark(accumulatedMarks, mark));
         }
