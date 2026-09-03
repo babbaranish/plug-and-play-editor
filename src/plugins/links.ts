@@ -6,8 +6,26 @@ import type { Token } from './tokens';
 import { DEFAULT_EMAIL_TOKENS, DELIMITER_MAP } from './tokens';
 
 export interface LinksPluginOptions {
-    /** Variables offered by the "insert variable" picker on the Text/URL fields */
-    tokens?: Token[];
+    /**
+     * Variables offered by the "insert variable" picker on the Text/URL fields.
+     *
+     * Pass a function when the list is not known at mount, or depends on what
+     * the document currently contains: it is called each time the dialog opens.
+     * An array is captured once, which silently yields an empty picker whenever
+     * the caller's data arrives asynchronously.
+     */
+    tokens?: Token[] | (() => Token[]);
+    /**
+     * Variables that are ACCEPTED when typed or pasted, but not listed in the
+     * picker.
+     *
+     * These are two different questions. A set that is large, or generated, or
+     * only meaningful in context is noise in a flat dropdown — but an author who
+     * copies one out of the document must still be able to paste it in. Listing
+     * everything acceptable is how a picker becomes unreadable; validating only
+     * what is listed is how a legitimate paste gets refused.
+     */
+    acceptTokens?: Token[] | (() => Token[]);
     /** Delimiter style — must match how those tokens get replaced elsewhere (default "double-curly") */
     delimiter?: 'double-curly' | 'single-curly' | 'percent';
 }
@@ -87,16 +105,92 @@ function unwrapAnchor(a: HTMLAnchorElement): void {
     parent.normalize();
 }
 
-function applyLinkAttrs(a: HTMLAnchorElement, url: string): void {
-    a.setAttribute('href', url);
+/**
+ * Is this URL nothing but a variable, e.g. `{{payment_link}}`?
+ *
+ * Such a link has no address yet: whatever consumes the document supplies one
+ * per recipient. Storing the variable in `href` is what breaks that, because an
+ * href is text — a URL field percent-encodes it, and nothing downstream can
+ * tell it from an ordinary address. Held in `data-href-token` instead, it stays
+ * intact through the DOM round trip and `href` keeps an inert placeholder.
+ */
+function tokenOnlyUrl(url: string, open: string, close: string): string | null {
+    const trimmed = url.trim();
+    if (!trimmed.startsWith(open) || !trimmed.endsWith(close)) return null;
+    const inner = trimmed.slice(open.length, trimmed.length - close.length).trim();
+    // One variable and nothing else. A URL merely CONTAINING one, such as
+    // `https://x.test/{{id}}`, is a real address and stays in href.
+    if (!inner || inner.includes(open) || inner.includes(close)) return null;
+    return inner;
+}
+
+const INERT_HREF = '#';
+
+/**
+ * Match what an author typed or pasted against the known variables, by key OR by
+ * label, and return the key.
+ *
+ * The label is the only form visible in the document, so it is what gets copied.
+ * Refusing it would be technically correct and useless. Matching is
+ * case-insensitive and whitespace-tolerant because a copy out of rendered HTML
+ * picks up non-breaking spaces and stray padding.
+ */
+export function resolveTokenReference(input: string, tokens: Token[]): string | null {
+    const norm = (v: string) => v.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+    const wanted = norm(input);
+    if (!wanted) return null;
+    const byKey = tokens.find((t) => norm(t.key) === wanted);
+    if (byKey) return byKey.key;
+    const byLabel = tokens.filter((t) => norm(t.label) === wanted);
+    // Two variables sharing a label cannot be told apart, so guessing would
+    // silently point the link at the wrong one.
+    return byLabel.length === 1 ? byLabel[0].key : null;
+}
+
+export function applyLinkAttrsForTest(a: HTMLAnchorElement, url: string, open: string, close: string): void {
+    applyLinkAttrs(a, url, open, close);
+}
+
+function applyLinkAttrs(a: HTMLAnchorElement, url: string, open: string, close: string): void {
+    const token = tokenOnlyUrl(url, open, close);
+    if (token) {
+        a.setAttribute('data-href-token', token);
+        a.setAttribute('href', INERT_HREF);
+    } else {
+        // Re-pointing a token link at a real address must clear the token, or
+        // the stale one wins wherever the document is resolved.
+        a.removeAttribute('data-href-token');
+        a.setAttribute('href', url);
+    }
     if (!a.target) a.target = '_blank';
     if (!a.rel) a.rel = 'noopener noreferrer';
 }
 
+/** The URL to SHOW for a link, so editing one round trips through the dialog. */
+export function displayUrlForTest(a: HTMLAnchorElement, open: string, close: string): string {
+    return displayUrl(a, open, close);
+}
+
+function displayUrl(a: HTMLAnchorElement, open: string, close: string): string {
+    const token = a.getAttribute('data-href-token');
+    return token ? `${open}${token}${close}` : a.getAttribute('href') || '';
+}
+
 export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
-    const tokens = options?.tokens ?? DEFAULT_EMAIL_TOKENS;
+    const readTokens = (source: Token[] | (() => Token[]) | undefined): Token[] => {
+        if (!source) return [];
+        try {
+            return (typeof source === 'function' ? source() : source) || [];
+        } catch {
+            // A throwing provider must not take the link dialog down with it.
+            return [];
+        }
+    };
+    /** Shown in the picker. */
+    const resolveTokens = (): Token[] => readTokens(options?.tokens ?? DEFAULT_EMAIL_TOKENS);
+    /** Accepted when typed or pasted: everything shown, plus the unlisted ones. */
+    const resolveAcceptable = (): Token[] => [...resolveTokens(), ...readTokens(options?.acceptTokens)];
     const [tokenOpen, tokenClose] = DELIMITER_MAP[options?.delimiter || 'double-curly'];
-    const tokenPicker = { list: tokens, open: tokenOpen, close: tokenClose };
 
     return {
         name: 'links',
@@ -114,6 +208,11 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
              * `savedRange` (the selection is captured before the modal steals focus).
              */
             function openLinkModal(anchor: HTMLAnchorElement | null, savedRange: Range | null) {
+                // Resolved per open, not per mount: a caller whose list loads
+                // asynchronously, or depends on the current document, would
+                // otherwise get an empty picker with no sign anything is wrong.
+                const tokens = resolveTokens();
+                const tokenPicker = { list: tokens, open: tokenOpen, close: tokenClose };
                 const selectedText = savedRange ? savedRange.toString() : '';
                 const editable = anchor ? isPlainTextAnchor(anchor) : true;
                 const currentText = anchor ? anchor.textContent ?? '' : selectedText;
@@ -122,7 +221,7 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                     name: 'url',
                     label: 'Link URL',
                     type: 'url' as const,
-                    value: anchor ? anchor.getAttribute('href') ?? '' : 'https://',
+                    value: anchor ? displayUrl(anchor, tokenOpen, tokenClose) : 'https://',
                     placeholder: `https://example.com  or  ${tokenOpen}unsubscribe_url${tokenClose}`,
                     tokens: tokenPicker
                 };
@@ -146,7 +245,7 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                     fields,
                     submitLabel: anchor ? 'Save' : 'Insert',
                     onSubmit: (values, { showError, close }) => {
-                        const url = values.url.trim();
+                        let url = values.url.trim();
                         if (!url) {
                             showError('URL is required.');
                             return;
@@ -158,6 +257,32 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                             return;
                         }
 
+                        // A variable must be one the picker actually offers —
+                        // but an author reasonably pastes what they can SEE, and
+                        // what a token chip shows is its label, not its key.
+                        // Accept either and store the key, so copying a chip out
+                        // of the body and pasting it here simply works. Anything
+                        // that matches neither is refused rather than stored as a
+                        // destination nothing can ever resolve.
+                        const chosen = tokenOnlyUrl(url, tokenOpen, tokenClose);
+                        if (chosen) {
+                            const acceptable = resolveAcceptable();
+                            const match = resolveTokenReference(chosen, acceptable);
+                            if (!match) {
+                                // Say WHICH way it failed. "Not a variable" reads
+                                // the same whether the name is wrong or the list
+                                // never loaded, and those need opposite responses
+                                // from whoever is looking at the screen.
+                                showError(
+                                    acceptable.length === 0
+                                        ? 'No variables are available here yet. Close this, let the page finish loading, and try again.'
+                                        : `"${chosen}" is not one of the ${acceptable.length} variables available here. Click the ${'{ }'} button beside this field, or copy the token exactly as it appears in the email body.`
+                                );
+                                return;
+                            }
+                            url = `${tokenOpen}${match}${tokenClose}`;
+                        }
+
                         const text = editable ? values.text.trim() : '';
                         if (editable && !text) {
                             showError('Link text is required.');
@@ -165,7 +290,7 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                         }
 
                         if (anchor) {
-                            applyLinkAttrs(anchor, url);
+                            applyLinkAttrs(anchor, url, tokenOpen, tokenClose);
                             if (editable && text !== currentText) anchor.textContent = text;
                         } else {
                             insertNewLink(url, text, selectedText, savedRange);
@@ -193,13 +318,13 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
 
                 if (selectedText && text === selectedText) {
                     document.execCommand('createLink', false, url);
-                    editor.editorArea.querySelectorAll('a').forEach(a => applyLinkAttrs(a as HTMLAnchorElement, url));
+                    editor.editorArea.querySelectorAll('a').forEach(a => applyLinkAttrs(a as HTMLAnchorElement, url, tokenOpen, tokenClose));
                     return;
                 }
 
                 const a = document.createElement('a');
                 a.textContent = text;
-                applyLinkAttrs(a, url);
+                applyLinkAttrs(a, url, tokenOpen, tokenClose);
 
                 const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
                 if (range) {
@@ -266,8 +391,13 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                 };
 
                 action(icons.externalLink, 'Open link', () => {
-                    const href = activeAnchor?.getAttribute('href');
+                    const a = activeAnchor;
                     hideBubble();
+                    // A variable has no address until something resolves it, so
+                    // there is nothing to open. Opening the inert placeholder
+                    // would just look broken.
+                    if (!a || a.hasAttribute('data-href-token')) return;
+                    const href = a.getAttribute('href');
                     if (href) window.open(href, '_blank', 'noopener,noreferrer');
                 });
                 action(icons.pencil, 'Edit link', () => {
@@ -293,9 +423,9 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                 const el = ensureBubble();
                 activeAnchor = a;
 
-                const href = a.getAttribute('href') ?? '';
-                urlLabel!.textContent = href;
-                urlLabel!.title = href;
+                const shown = displayUrl(a, tokenOpen, tokenClose);
+                urlLabel!.textContent = shown;
+                urlLabel!.title = shown;
 
                 editor.container.style.position = 'relative';
                 editor.container.appendChild(el);

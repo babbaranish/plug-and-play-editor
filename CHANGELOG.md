@@ -5,6 +5,25 @@ format follows [Keep a Changelog](https://keepachangelog.com/), and the
 project adheres to [Semantic Versioning](https://semver.org/) while
 pre-1.0 (minor versions may contain breaking changes).
 
+## [0.9.0] - 2026-09-03
+
+### Added
+
+- **A link's destination can be a token.** The `link` mark gains an optional
+  `hrefToken`, serialized to `data-href-token` on the anchor and read back by
+  the parser, so it survives a full DOM round trip.
+
+  An `href` holds text, so until now the only way to point a link at a token
+  was to type the token into the URL field — where it is percent-encoded,
+  loses its identity, and cannot be told apart from an ordinary address by
+  anything reading the document afterwards. Consumers that substitute tokens
+  (merge fields, payment links, anything generated per recipient) can now
+  carry the destination as data and resolve it at render time, leaving `href`
+  free to hold an inert placeholder until they do.
+
+  Existing links are unaffected: `hrefToken` is absent unless the attribute is
+  present, and the serializer never writes the token into `href`.
+
 ## [0.8.0] - 2026-08-31
 
 ### Added
