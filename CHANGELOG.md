@@ -5,6 +5,22 @@ format follows [Keep a Changelog](https://keepachangelog.com/), and the
 project adheres to [Semantic Versioning](https://semver.org/) while
 pre-1.0 (minor versions may contain breaking changes).
 
+## [0.9.0] - 2026-09-03
+
+### Added
+
+- **Link marks can carry a token-valued destination** (`hrefToken` on the
+  `link` mark). Some links point at something only the consuming system
+  can resolve — a per-recipient payment link, for example. Previously the
+  only way to express that was to type the token into the URL, where an
+  href percent-encodes it, it loses its identity, and nothing downstream
+  can tell it apart from an ordinary address. It now rides in its own
+  field, serialized to `data-href-token` on the anchor and read back off
+  it, so it survives a parse/serialize round trip intact while `href`
+  stays inert until something substitutes the real destination.
+  `hrefToken` is optional and absent on ordinary links, so existing
+  documents and consumers are unaffected.
+
 ## [0.8.0] - 2026-08-31
 
 ### Added
