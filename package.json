@@ -38,6 +38,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "prepublishOnly": "npm run build && npm test",
     "test:watch": "vitest"
   },
   "peerDependencies": {
