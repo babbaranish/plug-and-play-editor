@@ -5,21 +5,41 @@ format follows [Keep a Changelog](https://keepachangelog.com/), and the
 project adheres to [Semantic Versioning](https://semver.org/) while
 pre-1.0 (minor versions may contain breaking changes).
 
-## [0.9.0] - 2026-09-03
+## [0.10.0] - 2026-09-03
 
 ### Added
 
-- **Link marks can carry a token-valued destination** (`hrefToken` on the
-  `link` mark). Some links point at something only the consuming system
-  can resolve — a per-recipient payment link, for example. Previously the
-  only way to express that was to type the token into the URL, where an
-  href percent-encodes it, it loses its identity, and nothing downstream
-  can tell it apart from an ordinary address. It now rides in its own
-  field, serialized to `data-href-token` on the anchor and read back off
-  it, so it survives a parse/serialize round trip intact while `href`
-  stays inert until something substitutes the real destination.
-  `hrefToken` is optional and absent on ordinary links, so existing
-  documents and consumers are unaffected.
+- **The link dialog can now point a link at a variable.** 0.9.0 taught the
+  document model to carry a token-valued destination; this wires it to the
+  editor. Entering a URL that is nothing but a variable — `{{payment_link}}` —
+  stores it in `data-href-token` and leaves an inert `href="#"`, rather than
+  writing the variable into the href where the browser percent-encodes it and
+  nothing downstream can tell it from a real address. Editing such a link shows
+  the variable again, so a round trip through the dialog preserves it, and
+  re-pointing the link at a real address clears the stale token. A URL that
+  merely *contains* a variable, such as `https://x.test/{{id}}`, is a real
+  address and stays in `href` as before.
+- **A pasted variable is matched by key or by label.** The label is the only
+  form visible in the document, so it is what an author can select and copy;
+  refusing it would be technically correct and useless. Matching ignores case,
+  collapses whitespace and tolerates the non-breaking spaces a copy out of
+  rendered HTML picks up. Two variables sharing a label are refused rather than
+  guessed at, since picking one would silently send the link to the wrong place.
+- `LinksPluginOptions.acceptTokens` — variables that are accepted when typed or
+  pasted but not listed in the picker. What a picker *shows* and what a field
+  *accepts* are different questions: a large or generated set makes a flat
+  dropdown unreadable, while validating only what is listed refuses a legitimate
+  paste.
+- `LinksPluginOptions.tokens` also accepts a function, called each time the
+  dialog opens. Use it when the list is not known at mount or depends on the
+  document's current contents; an array is captured once, which yields an empty
+  picker when the caller's data arrives asynchronously. Passing an array still
+  works unchanged.
+
+### Fixed
+
+- CHANGELOG.md listed `[0.9.0]` twice — a merge stacked two entries written in
+  parallel for the same release. Consolidated into one.
 
 ## [0.9.0] - 2026-09-03
 
