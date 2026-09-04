@@ -191,7 +191,7 @@ function inlineToDom(node: InlineNode, target: Document): DomNode | null {
             const img = target.createElement('img');
             img.src = node.src;
             if (node.alt) img.alt = node.alt;
-            return img;
+            return wrapMarks(img, node.marks || [], target);
         }
         case 'mention': {
             const span = target.createElement('span');
@@ -199,7 +199,7 @@ function inlineToDom(node: InlineNode, target: Document): DomNode | null {
             span.contentEditable = 'false';
             span.dataset.userId = node.userId;
             span.textContent = `@${node.name}`;
-            return span;
+            return wrapMarks(span, node.marks || [], target);
         }
         case 'token': {
             const span = target.createElement('span');
@@ -207,7 +207,7 @@ function inlineToDom(node: InlineNode, target: Document): DomNode | null {
             span.contentEditable = 'false';
             span.dataset.key = node.key;
             span.textContent = node.label;
-            return span;
+            return wrapMarks(span, node.marks || [], target);
         }
         default:
             return assertNever(node);

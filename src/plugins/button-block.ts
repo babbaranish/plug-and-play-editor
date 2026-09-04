@@ -4,6 +4,7 @@ import { icons } from '../core/icons';
 import { openFormModal } from '../core/modal';
 import type { Token } from './tokens';
 import { DEFAULT_EMAIL_TOKENS, DELIMITER_MAP } from './tokens';
+import { tokenOnlyUrl } from './links';
 
 export interface ButtonBlockPluginOptions {
     /** Variables offered by the "insert variable" picker on the Text/URL fields */
@@ -17,6 +18,25 @@ function isValidUrl(url: string): boolean {
         const parsed = new URL(url);
         return parsed.protocol === 'http:' || parsed.protocol === 'https:' || parsed.protocol === 'mailto:';
     } catch { return false; }
+}
+
+/**
+ * A button URL is acceptable if it is a real address OR exactly one variable.
+ *
+ * The URL field offers a variable picker, and every variable it offered was
+ * then rejected by isValidUrl with "Only http, https, and mailto links are
+ * allowed" — the picker and the validator disagreed, so a payment link could
+ * not be put on a button at all, which is the most natural way to build a
+ * Pay Now button in an offer letter.
+ *
+ * A variable stays in `href` as `{{...}}` rather than moving to
+ * `data-href-token`: whatever renders the email substitutes it there, and that
+ * is true of ordinary variables like {{login_url}} as much as of a payment
+ * link. Only ONE variable and nothing else, matching the link plugin's rule —
+ * `https://x.test/{{id}}` is a real address and is validated as one.
+ */
+function isAcceptableButtonUrl(url: string, open: string, close: string): boolean {
+    return isValidUrl(url) || tokenOnlyUrl(url, open, close) !== null;
 }
 
 function escapeAttr(str: string): string {
@@ -111,8 +131,8 @@ function openButtonModal(
         onSubmit: (values, { showError, close }) => {
             const text = values.text.trim() || DEFAULT_CONFIG.text;
             const url = values.url.trim();
-            if (!isValidUrl(url)) {
-                showError('Invalid URL. Only http, https, and mailto links are allowed.');
+            if (!isAcceptableButtonUrl(url, tokenOpen, tokenClose)) {
+                showError(`Enter a link starting with http, https or mailto, or a single variable such as ${tokenOpen}login_url${tokenClose}.`);
                 return;
             }
 

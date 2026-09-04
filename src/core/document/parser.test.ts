@@ -377,3 +377,35 @@ describe('round-trip — parse -> serialize -> parse is idempotent', () => {
         expect(serializeToHtml(parsed)).toBe('<p><strong>ab</strong></p>');
     });
 });
+
+/**
+ * A link is a MARK, and marks used to live only on text runs, so an anchor
+ * wrapping anything that is not text was not degraded on a round trip, it was
+ * deleted. An image "Pay Now" button came back as a bare image and a chip
+ * inside a link came back as a bare chip, with nothing on screen to say the
+ * destination had gone.
+ */
+describe('an anchor around something that is not text', () => {
+    const T = 'Fee:b0d849f1-5b6a-495f-8943-bc6b9cd9a605:link-1:PaymentGatewayLink';
+    const rt = (html: string) => serializeToHtml(parseDom(domFrom(html)));
+
+    it('survives around an image button', () => {
+        const out = rt(`<p><a href="#" data-href-token="${T}"><img src="btn.png" alt="Pay"></a></p>`);
+        expect(out).toContain('data-href-token="' + T + '"');
+        expect(out).toContain('<img');
+    });
+
+    it('survives around a token chip', () => {
+        const out = rt(`<p><a href="#" data-href-token="${T}"><span class="play-editor-token" data-key="registered_name">{{registered_name}}</span></a></p>`);
+        expect(out).toContain('data-href-token="' + T + '"');
+        expect(out).toContain('data-key="registered_name"');
+    });
+
+    it('survives around plain text, as it always did', () => {
+        expect(rt(`<p><a href="#" data-href-token="${T}">Pay Now</a></p>`)).toContain('data-href-token');
+    });
+
+    it('keeps ordinary formatting marks on an image too', () => {
+        expect(rt('<p><b><img src="x.png"></b></p>')).toContain('<strong>');
+    });
+});

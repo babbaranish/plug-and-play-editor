@@ -57,11 +57,20 @@ export interface TextNode {
     readonly marks: readonly Mark[];
 }
 
-/** Inline elements that aren't runs of text. */
+/**
+ * Inline elements that aren't runs of text.
+ *
+ * These carry `marks` for the same reason a text run does. Without it an atom
+ * dropped every mark wrapping it, and since a link IS a mark, an anchor around
+ * an image or a token chip did not survive a round trip: the anchor was not
+ * degraded, it was deleted, leaving a bare image where a Pay Now button had
+ * been, with nothing on screen or in the HTML to say a link was ever there.
+ */
 export interface InlineImageNode {
     readonly type: 'inline-image';
     readonly src: string;
     readonly alt?: string;
+    readonly marks?: readonly Mark[];
 }
 
 export interface HardBreakNode {
@@ -72,12 +81,14 @@ export interface MentionNode {
     readonly type: 'mention';
     readonly userId: string;
     readonly name: string;
+    readonly marks?: readonly Mark[];
 }
 
 export interface TokenNode {
     readonly type: 'token';
     readonly key: string;
     readonly label: string;
+    readonly marks?: readonly Mark[];
 }
 
 export type InlineNode = TextNode | InlineImageNode | HardBreakNode | MentionNode | TokenNode;

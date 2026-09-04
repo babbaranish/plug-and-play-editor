@@ -224,6 +224,15 @@ function collectInline(parent: HTMLElement, accumulatedMarks: readonly Mark[] = 
     return mergeAdjacentText(out);
 }
 
+/**
+ * Marks to store on an atom, or nothing at all when there are none — an absent
+ * field keeps documents byte-identical to what they were before atoms carried
+ * marks, so nothing that compares Docs changes behaviour.
+ */
+function marksOrUndefined(marks: readonly Mark[]): readonly Mark[] | undefined {
+    return marks.length > 0 ? Object.freeze([...marks]) : undefined;
+}
+
 function inlineFromNode(node: Node, accumulatedMarks: readonly Mark[] = []): InlineNode[] {
     if (node.nodeType === Node.TEXT_NODE) {
         const value = (node as Text).data;
@@ -240,7 +249,11 @@ function inlineFromNode(node: Node, accumulatedMarks: readonly Mark[] = []): Inl
             return [{
                 type: 'inline-image',
                 src: el.getAttribute('src') || '',
-                alt: el.getAttribute('alt') || undefined
+                alt: el.getAttribute('alt') || undefined,
+                // Carried for the same reason a text run carries them: a link is
+                // a mark, so an image inside an anchor loses the anchor entirely
+                // without this.
+                marks: marksOrUndefined(accumulatedMarks)
             }];
         }
         case 'B': case 'STRONG':
@@ -272,14 +285,16 @@ function inlineFromNode(node: Node, accumulatedMarks: readonly Mark[] = []): Inl
                 return [{
                     type: 'mention',
                     userId: el.dataset.userId || '',
-                    name: (el.textContent || '').replace(/^@/, '')
+                    name: (el.textContent || '').replace(/^@/, ''),
+                    marks: marksOrUndefined(accumulatedMarks)
                 }];
             }
             if (el.classList.contains('play-editor-token')) {
                 return [{
                     type: 'token',
                     key: el.dataset.key || '',
-                    label: el.textContent || el.dataset.key || ''
+                    label: el.textContent || el.dataset.key || '',
+                    marks: marksOrUndefined(accumulatedMarks)
                 }];
             }
             // Generic SPAN — inspect inline styles for font/color marks.

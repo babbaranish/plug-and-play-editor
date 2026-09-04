@@ -114,7 +114,7 @@ function unwrapAnchor(a: HTMLAnchorElement): void {
  * tell it from an ordinary address. Held in `data-href-token` instead, it stays
  * intact through the DOM round trip and `href` keeps an inert placeholder.
  */
-function tokenOnlyUrl(url: string, open: string, close: string): string | null {
+export function tokenOnlyUrl(url: string, open: string, close: string): string | null {
     const trimmed = url.trim();
     if (!trimmed.startsWith(open) || !trimmed.endsWith(close)) return null;
     const inner = trimmed.slice(open.length, trimmed.length - close.length).trim();
@@ -317,8 +317,24 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                 editor.editorArea.focus();
 
                 if (selectedText && text === selectedText) {
+                    // Only the anchors execCommand actually touched. Applying to
+                    // every anchor in the document re-pointed links the author
+                    // never selected: insert an ordinary link into an offer letter
+                    // that already carries a payment link, and applyLinkAttrs
+                    // stripped `data-href-token` off the payment link and pointed
+                    // it at the new address. An anchor counts as touched if it is
+                    // new, or if its href changed — which covers re-linking a
+                    // selection that already contained one.
+                    const priorHref = new Map<Element, string | null>();
+                    editor.editorArea.querySelectorAll('a').forEach(a => priorHref.set(a, a.getAttribute('href')));
+
                     document.execCommand('createLink', false, url);
-                    editor.editorArea.querySelectorAll('a').forEach(a => applyLinkAttrs(a as HTMLAnchorElement, url, tokenOpen, tokenClose));
+
+                    editor.editorArea.querySelectorAll('a').forEach(a => {
+                        const had = priorHref.has(a);
+                        if (had && priorHref.get(a) === a.getAttribute('href')) return;
+                        applyLinkAttrs(a as HTMLAnchorElement, url, tokenOpen, tokenClose);
+                    });
                     return;
                 }
 
