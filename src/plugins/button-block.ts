@@ -39,10 +39,30 @@ function isAcceptableButtonUrl(url: string, open: string, close: string): boolea
     return isValidUrl(url) || tokenOnlyUrl(url, open, close) !== null;
 }
 
-function escapeAttr(str: string): string {
+/**
+ * Escape for use as element CONTENT.
+ *
+ * textContent -> innerHTML handles `&`, `<` and `>`, which is all content needs.
+ */
+function escapeText(str: string): string {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+}
+
+/**
+ * Escape for use inside a double-quoted ATTRIBUTE value.
+ *
+ * The content escaper is not enough here, because it leaves `"` alone: a url of
+ * `https://x.test" onmouseover="alert(1)` came back unchanged, closed the href
+ * it was interpolated into, and `onmouseover` was parsed as a real attribute on
+ * the anchor. Verified in a browser, not reasoned about.
+ *
+ * Same two replacements as escapeAttrValue in source-code-format.ts, which had
+ * this right; keep the two in step.
+ */
+function escapeAttr(str: string): string {
+    return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 }
 
 interface ButtonConfig {
@@ -65,8 +85,12 @@ const DEFAULT_CONFIG: ButtonConfig = {
     paddingH: 24
 };
 
+export function generateButtonHtmlForTest(cfg: ButtonConfig): string {
+    return generateButtonHtml(cfg);
+}
+
 function generateButtonHtml(cfg: ButtonConfig): string {
-    const safeText = escapeAttr(cfg.text);
+    const safeText = escapeText(cfg.text);
     const safeUrl = escapeAttr(cfg.url);
     return `<div contenteditable="false" class="play-editor-button-block" style="margin:1em 0;text-align:center;">` +
         `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" ` +
