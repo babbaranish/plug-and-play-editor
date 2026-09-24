@@ -5,6 +5,78 @@ format follows [Keep a Changelog](https://keepachangelog.com/), and the
 project adheres to [Semantic Versioning](https://semver.org/) while
 pre-1.0 (minor versions may contain breaking changes).
 
+## [0.10.3] - 2026-09-24
+
+### Fixed
+
+- **Pasting from another template lost its font, size and colour.** The paste
+  cleaner stripped every inline style except `text-align` and unwrapped
+  `<font>` — which is exactly how this editor's own font, size and colour tools
+  write formatting. Pasted content now keeps its typography (family, size,
+  weight, style, colour, background, line height, alignment, underline) while
+  still dropping Word/Docs junk. Styles that merely restate what the text would
+  inherit where it lands are dropped, so the "interchange" styles browsers add
+  when copying don't bake one editor's theme into every paste. A link's
+  `data-href-token` and colour survive the paste too.
+- **Ctrl+K / Cmd+K now opens the link dialog** — Edit when the caret is in a
+  link, Insert otherwise (prefilled with the selected text).
+- **Linking text no longer changes its colour.** The stylesheet paints links in
+  the accent colour, which overrode the colour the text inherited (red text
+  turned blue), and email clients do the same with their default blue. A new
+  link now carries its text's colour inline, so it looks the same in the editor
+  and in the sent email. Existing links are unchanged.
+- **Ctrl+F / Cmd+F in the code view.** It blocked the browser's own find, then
+  opened a panel that searched the hidden rich-text view. Find & Replace now
+  searches the code itself in the code view — highlights, Find Next, Replace and
+  Replace All all work there.
+- **Find highlights could be saved into the content.** Matches were wrapped in
+  real `<mark>` elements inside the document, so switching to the code view
+  with the find panel open put them in the source, and from there in the saved
+  HTML — as yellow highlights in the sent email. Highlights are now painted with
+  the CSS Custom Highlight API and never touch the document.
+- The find panel no longer floats over the top of the content, where it hid
+  any match on the first lines. Pressing Enter right after typing a search
+  finds the first match instead of doing nothing. Replace All treats `$&`, `$1`
+  and `$$` in the replacement as plain text.
+
+## [0.10.2] - 2026-09-24
+
+### Security
+
+- **A button block's URL could inject attributes into the generated
+  anchor.** `ButtonBlockPlugin` escaped the URL with a content escaper that
+  leaves `"` alone, so a URL such as `https://x.test/" onmouseover="alert(1)`
+  closed the `href` it was interpolated into and the rest was parsed as real
+  attributes on the `<a>`. Attribute values are now escaped for a
+  double-quoted context (`&` and `"`); button text keeps its content escaping.
+  Ordinary URLs, `&` in query strings and `{{variable}}` destinations are
+  written through unchanged.
+
+## [0.10.1] - 2026-09-04
+
+### Fixed
+
+- **Inserting a link over a selection re-pointed every other link in the
+  document.** After wrapping the selection, the Insert Link dialog applied the
+  new URL to *every* anchor in the editor rather than only the one it created
+  — so adding an ordinary link to an email that already carried a payment link
+  silently redirected the payment link too, and stripped its
+  `data-href-token`. Only anchors the insert actually created or changed are
+  touched now. Affected 0.8.0 through 0.10.0.
+- **A link around an image, mention or variable chip was deleted on a
+  document round trip.** A link is a mark, and these inline atoms carried no
+  marks, so parsing an `<a>` wrapping an `<img>` or a token chip kept the
+  image or chip and dropped the anchor entirely — a Pay Now image came back as
+  a bare image, with nothing left to show a link had been there.
+  `InlineImageNode`, `MentionNode` and `TokenNode` gain an optional `marks`
+  field; it is absent when empty, so existing documents compare identically.
+- **A button's URL could not be a variable.** The button dialog offers a
+  variable picker on its URL field, then rejected every variable it offered as
+  an invalid URL. A URL that is exactly one variable, such as
+  `{{login_url}}`, is now accepted and kept in `href` for whatever renders the
+  email to substitute. A URL merely containing one is still validated as an
+  address.
+
 ## [0.10.0] - 2026-09-03
 
 ### Added

@@ -308,6 +308,19 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
              * would flatten. Otherwise (empty selection, or a relabelled link) a new
              * anchor is built and dropped in.
              */
+            /**
+             * Linking text must not recolour it. The stylesheet paints anchors in
+             * the accent colour, which beats the colour the text inherited — red
+             * text went blue the moment it was linked — and email clients do the
+             * same with their own default link blue. Writing the inherited colour
+             * onto the new anchor inline keeps the text looking as it did, in the
+             * editor and in the sent email alike.
+             */
+            function keepTextColor(a: HTMLAnchorElement) {
+                if (a.style.color || !a.parentElement) return;
+                a.style.color = getComputedStyle(a.parentElement).color;
+            }
+
             function insertNewLink(url: string, text: string, selectedText: string, savedRange: Range | null) {
                 const sel = window.getSelection();
                 if (savedRange) {
@@ -334,6 +347,7 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                         const had = priorHref.has(a);
                         if (had && priorHref.get(a) === a.getAttribute('href')) return;
                         applyLinkAttrs(a as HTMLAnchorElement, url, tokenOpen, tokenClose);
+                        if (!had) keepTextColor(a as HTMLAnchorElement);
                     });
                     return;
                 }
@@ -346,6 +360,7 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                 if (range) {
                     range.deleteContents();
                     range.insertNode(a);
+                    keepTextColor(a);
                     const after = document.createRange();
                     after.setStartAfter(a);
                     after.collapse(true);
@@ -502,7 +517,20 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
 
             editor.editorArea.addEventListener('mouseover', onMouseOver);
             editor.editorArea.addEventListener('mouseleave', onMouseLeave);
+            const onShortcut = (e: KeyboardEvent) => {
+                if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'k') return;
+                e.preventDefault();
+                hideBubble();
+                const sel = window.getSelection();
+                if (!sel || sel.rangeCount === 0) return;
+                const at = sel.anchorNode;
+                const a = editableAnchorAt(at && at.nodeType === Node.ELEMENT_NODE ? at : at?.parentElement ?? null);
+                if (a) openLinkModal(a, null);
+                else openLinkModal(null, sel.getRangeAt(0).cloneRange());
+            };
+
             editor.editorArea.addEventListener('dblclick', onDblClick);
+            editor.editorArea.addEventListener('keydown', onShortcut);
             editor.editorArea.addEventListener('scroll', onScroll);
             document.addEventListener('mousedown', onDocMouseDown);
             window.addEventListener('scroll', onScroll, true);
@@ -527,6 +555,7 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                 editor.editorArea.removeEventListener('mouseover', onMouseOver);
                 editor.editorArea.removeEventListener('mouseleave', onMouseLeave);
                 editor.editorArea.removeEventListener('dblclick', onDblClick);
+                editor.editorArea.removeEventListener('keydown', onShortcut);
                 editor.editorArea.removeEventListener('scroll', onScroll);
                 document.removeEventListener('mousedown', onDocMouseDown);
                 window.removeEventListener('scroll', onScroll, true);
