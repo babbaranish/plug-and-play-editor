@@ -5,6 +5,42 @@ format follows [Keep a Changelog](https://keepachangelog.com/), and the
 project adheres to [Semantic Versioning](https://semver.org/) while
 pre-1.0 (minor versions may contain breaking changes).
 
+## [0.10.4] - 2026-10-06
+
+### Fixed
+
+- **Pasted content now looks exactly like what was copied.** The paste
+  cleaner kept only a short list of text styles, so every paste from another
+  template, an email or a web page lost part of its layout: lists lost their
+  indent, headings and paragraphs their spacing, buttons their padding,
+  rounded corners and no-underline, icons their vertical alignment, and table
+  cells their `align="center"`, `width` and `bgcolor`. A link whose colour
+  matched the text around it lost that colour and turned the default link
+  colour. The cleaner now keeps every inline style as written (so shorthands
+  such as `text-decoration: none` stay in the form email clients understand),
+  the presentational attributes email layouts use, layout `<div>`s, and the
+  editor's own blocks and chips, and removes only what is dangerous or junk:
+  scripts, event handlers, script URLs, positioning, Office `mso-*` styles and
+  the browser's copy noise.
+- **Pasting a token chip or button block no longer deletes what follows it.**
+  Chrome's `insertHTML` drops a non-editable element and everything after it
+  in its block. Pasted chips and button blocks are now inserted editable and
+  made non-editable once they are in, so they paste whole and stay editable
+  with their own tools.
+- **A paste starting at the end of a line no longer adds a blank line** at the
+  top of the first pasted block (Chrome's `Apple-interchange-newline` marker is
+  dropped instead of becoming a real `<br>`).
+
+### Security
+
+- **Pasted `javascript:` links were kept.** The paste cleaner kept any `href`
+  as-is. Link and image URLs are now read with the browser's URL parser —
+  which also sees through `java&#9;script:` and leading control characters —
+  and kept only for `http`, `https`, `mailto` and `tel` (plus inline images and
+  `cid:` for `src`). Pasted iframes are rebuilt with the media plugin's
+  sandboxing, and `url()` in pasted styles must point at http(s) or an inline
+  image.
+
 ## [0.10.3] - 2026-09-24
 
 ### Fixed

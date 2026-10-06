@@ -18,6 +18,28 @@ function isValidImageUrl(url: string): boolean {
     }
 }
 
+/**
+ * A fresh iframe carrying only `source`'s src, width and height, isolated from
+ * the host page. `source`'s src must already be checked to be http(s).
+ */
+export function hardenedIframe(doc: Document, source: Element): HTMLIFrameElement {
+    const clean = doc.createElement('iframe');
+    clean.src = source.getAttribute('src')!;
+    clean.setAttribute('frameborder', '0');
+    clean.setAttribute('allowfullscreen', '');
+    // Security hardening: isolate third-party embeds from the host page.
+    clean.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-presentation');
+    clean.setAttribute('referrerpolicy', 'no-referrer');
+    clean.setAttribute('loading', 'lazy');
+    clean.style.maxWidth = '100%';
+
+    const width = source.getAttribute('width');
+    const height = source.getAttribute('height');
+    if (width) clean.width = width;
+    if (height) clean.height = height;
+    return clean;
+}
+
 function sanitizeEmbedCode(html: string): string | null {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
@@ -34,20 +56,7 @@ function sanitizeEmbedCode(html: string): string | null {
         return null;
     }
 
-    const clean = document.createElement('iframe');
-    clean.src = src;
-    clean.setAttribute('frameborder', '0');
-    clean.setAttribute('allowfullscreen', '');
-    // Security hardening: isolate third-party embeds from the host page.
-    clean.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-presentation');
-    clean.setAttribute('referrerpolicy', 'no-referrer');
-    clean.setAttribute('loading', 'lazy');
-    clean.style.maxWidth = '100%';
-
-    const width = iframe.getAttribute('width');
-    const height = iframe.getAttribute('height');
-    if (width) clean.width = width;
-    if (height) clean.height = height;
+    const clean = hardenedIframe(document, iframe);
 
     const wrapper = document.createElement('div');
     wrapper.className = 'play-editor-media-wrapper';
