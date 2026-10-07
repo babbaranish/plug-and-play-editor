@@ -5,6 +5,26 @@ format follows [Keep a Changelog](https://keepachangelog.com/), and the
 project adheres to [Semantic Versioning](https://semver.org/) while
 pre-1.0 (minor versions may contain breaking changes).
 
+## [0.10.5] - 2026-10-07
+
+### Fixed
+
+- **The toolbar's link button now edits the link the cursor is in.** With the
+  caret (or a selection) inside an existing link, it opened an empty "Insert
+  Link" dialog, and saving it nested a new `<a>` inside the old one. The old
+  link kept its old URL, so the email still pointed there while the editor
+  appeared to show the new one. It now opens "Edit Link" for that link, as
+  double-click and Ctrl/⌘+K already did. A selection that runs past a link, or
+  covers plain text, still inserts a new link.
+
+- **Pasted text could change colour.** The paste cleaner dropped a colour, font
+  or size when it matched the spot the caret was in, expecting the pasted text
+  to inherit it there. It often doesn't: press Enter after black text and
+  paste, and the paste replaces that empty black paragraph, so the text landed
+  in the editor's default grey. The copied colour, font and size are now always
+  kept; only the default-valued properties a browser stamps on every copied
+  node (`orphans: 2`, `letter-spacing: normal`, …) are dropped.
+
 ## [0.10.4] - 2026-10-06
 
 ### Fixed

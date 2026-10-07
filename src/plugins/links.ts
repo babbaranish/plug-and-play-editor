@@ -537,10 +537,26 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
 
             editor.addToolbarDivider();
 
+            // A selection that starts and ends in one link edits that link. Opening
+            // Insert Link there nested a new <a> inside the old one, which kept its
+            // old href. A selection that runs past a link still inserts a new one.
+            const anchorHoldingSelection = (sel: Selection): HTMLAnchorElement | null => {
+                const linkAround = (node: Node | null) =>
+                    editableAnchorAt(node && node.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement ?? null);
+                const start = linkAround(sel.anchorNode);
+                return start && linkAround(sel.focusNode) === start ? start : null;
+            };
+
             editor.addToolbarButton(icons.link, 'Insert Link', () => {
+                hideBubble();
                 const sel = window.getSelection();
-                const savedRange = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).cloneRange() : null;
-                openLinkModal(null, savedRange);
+                if (!sel || sel.rangeCount === 0) {
+                    openLinkModal(null, null);
+                    return;
+                }
+                const a = anchorHoldingSelection(sel);
+                if (a) openLinkModal(a, null);
+                else openLinkModal(null, sel.getRangeAt(0).cloneRange());
             });
 
             editor.addToolbarButton(icons.unlink, 'Unlink', () => {

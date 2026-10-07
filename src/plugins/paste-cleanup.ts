@@ -52,18 +52,26 @@ const EDITOR_CLASS = /^play-editor-[a-z0-9-]+$/;
 const NON_EDITABLE = 'data-pe-non-editable';
 
 /**
- * Inherited properties. A pasted value equal to what the element would inherit
- * where it lands changes nothing on screen, and is the bulk of the
- * "interchange" styles a browser wraps around every copy (the source page's
- * font, colour, letter spacing…), so it is dropped rather than repeated on
- * every node.
+ * The long tail of properties a browser stamps on every copied node at their
+ * default values, as part of its "interchange" styles. At these values they
+ * change nothing, so they are dropped rather than repeated on every node.
+ *
+ * Nothing is dropped for matching the paste point. Colour, font and size are
+ * always kept: what the caret sits in is often not what the pasted content
+ * ends up in (insertHTML replaces the empty paragraph Enter just made, styled
+ * span and all), so a colour dropped as "already black here" landed grey.
  */
-const INHERITED_PROPS = [
-    'font-family', 'font-size', 'font-weight', 'font-style', 'font-variant-caps', 'font-variant-ligatures',
-    'color', 'line-height', 'text-align', 'text-indent', 'text-transform', 'letter-spacing', 'word-spacing',
-    'white-space', 'orphans', 'widows',
-];
-const INHERITED = new Set(INHERITED_PROPS);
+const DEFAULT_VALUES: Record<string, RegExp> = {
+    'font-variant-ligatures': /^normal$/, 'font-variant-caps': /^normal$/, 'letter-spacing': /^normal$/,
+    'word-spacing': /^(0px|normal)$/, 'text-indent': /^0px$/, 'text-transform': /^none$/,
+    'white-space': /^normal$/, orphans: /^2$/, widows: /^2$/,
+};
+
+/** Inline elements, on which a text-align (another interchange regular) does nothing. */
+const INLINE_TAGS = new Set([
+    'SPAN', 'A', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'SUP', 'SUB', 'CODE', 'MARK', 'SMALL', 'BIG',
+    'DEL', 'INS', 'TIME', 'IMG', 'BR',
+]);
 
 /** Never carried: Office and vendor internals, and positioning that could lift content out of the editor. */
 const DROPPED_PROPS = /^(mso-|-webkit-|-moz-|-ms-|position$|z-index$|top$|right$|bottom$|left$|inset)/;
@@ -79,27 +87,10 @@ function isSafeCssValue(value: string): boolean {
     return urls.every(m => /^(https?:|data:image\/)/i.test(m[2].trim()));
 }
 
-/** What text looks like at a point: the computed values of the inherited properties, and what it sits on. */
-export type Typography = Record<string, string> & { background: string };
-
 /** Legacy `<font size>` 1–7, as browsers render them. */
 const FONT_SIZE_PX: Record<string, string> = { '1': '10px', '2': '13px', '3': '16px', '4': '18px', '5': '24px', '6': '32px', '7': '48px' };
 
 const TRANSPARENT = /^(transparent|rgba\(\s*0,\s*0,\s*0,\s*0\s*\))$/i;
-
-/** Reads the typography text inherits at `el` in the live document. */
-export function typographyAt(el: Element): Typography {
-    const cs = getComputedStyle(el);
-    // Background isn't inherited — what text "sits on" is the nearest opaque one.
-    let background = 'rgb(255, 255, 255)';
-    for (let n: Element | null = el; n; n = n.parentElement) {
-        const bg = getComputedStyle(n).backgroundColor;
-        if (bg && !TRANSPARENT.test(bg)) { background = bg; break; }
-    }
-    const out: Typography = { background };
-    for (const prop of INHERITED_PROPS) out[prop] = cs.getPropertyValue(prop);
-    return out;
-}
 
 /**
  * A style attribute's declarations as written. Going through the CSSOM instead
@@ -125,20 +116,12 @@ function declarations(style: string): { prop: string; value: string }[] {
     return out;
 }
 
-/**
- * Keeps every pasted declaration that is formatting, as written, and returns
- * what the element's children will inherit. Inherited values that merely
- * restate the paste point, and a background the text already sits on, are
- * dropped as noise.
- */
-function filterStyle(el: HTMLElement, inherited: Typography): Typography {
-    // Validates each declaration and gives its normalised value to compare with.
+/** Keeps every pasted declaration that is formatting, as written. */
+function filterStyle(el: HTMLElement): void {
+    // Validates each declaration and gives its normalised value to check.
     const probe = el.ownerDocument.createElement('span').style;
     const kept: string[] = [];
-    const next: Typography = { ...inherited };
-    // A link is painted by the stylesheet (and by email clients), not by what it
-    // inherits, so its colour is never "the same as its parent's".
-    const isLink = el.tagName === 'A';
+    const inline = INLINE_TAGS.has(el.tagName);
 
     for (const { prop, value } of declarations(el.getAttribute('style') || '')) {
         const important = /!\s*important$/i.test(value);
@@ -150,19 +133,13 @@ function filterStyle(el: HTMLElement, inherited: Typography): Typography {
         const normal = probe.getPropertyValue(prop).trim();
         if (!normal) continue;
 
-        if (INHERITED.has(prop)) {
-            next[prop] = normal;
-            if (normal === inherited[prop] && !(isLink && prop === 'color')) continue;
-        } else if (prop === 'background-color') {
-            if (TRANSPARENT.test(normal) || normal === inherited.background) continue;
-            next.background = normal;
-        }
+        if (DEFAULT_VALUES[prop]?.test(normal) || (prop === 'text-align' && inline)) continue;
+        if (prop === 'background-color' && TRANSPARENT.test(normal)) continue;
         kept.push(`${prop}: ${bare}${important ? ' !important' : ''}`);
     }
 
     if (kept.length) el.setAttribute('style', kept.join('; '));
     else el.removeAttribute('style');
-    return next;
 }
 
 /**
@@ -219,7 +196,7 @@ function rename(el: Element, tag: string): HTMLElement {
     return out;
 }
 
-function cleanChildren(parent: Element, inherited: Typography): void {
+function cleanChildren(parent: Element): void {
     for (const node of Array.from(parent.childNodes)) {
         if (node.nodeType === Node.COMMENT_NODE) { node.remove(); continue; }
         if (node.nodeType !== Node.ELEMENT_NODE) continue;
@@ -260,22 +237,18 @@ function cleanChildren(parent: Element, inherited: Typography): void {
 
         const tag = el.tagName;
         cleanAttributes(el);
-        const childInherits = filterStyle(el, inherited);
+        filterStyle(el);
 
-        cleanChildren(el, childInherits);
+        cleanChildren(el);
 
         if (!ALLOWED_TAGS.has(tag) || (tag === 'SPAN' && el.attributes.length === 0)) unwrap(el);
     }
 }
 
-/**
- * Cleans pasted HTML: drops what is dangerous or plumbing, keeps all the
- * formatting. `context` is the typography at the paste point; inherited
- * declarations that merely restate it are dropped as noise.
- */
-export function cleanHtml(html: string, context: Typography): string {
+/** Cleans pasted HTML: drops what is dangerous or plumbing, keeps all the formatting. */
+export function cleanHtml(html: string): string {
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    cleanChildren(doc.body, context);
+    cleanChildren(doc.body);
     return doc.body.innerHTML;
 }
 
@@ -303,13 +276,7 @@ export const PasteCleanupPlugin: Plugin = {
             if (!html) return; // Plain text pastes are fine as-is
 
             e.preventDefault();
-
-            const sel = window.getSelection();
-            let at: Node | null = sel && sel.rangeCount > 0 ? sel.getRangeAt(0).startContainer : null;
-            if (at && at.nodeType !== Node.ELEMENT_NODE) at = at.parentNode;
-            const contextEl = at instanceof Element && editor.editorArea.contains(at) ? at : editor.editorArea;
-
-            editor.execCommand('insertHTML', cleanHtml(html, typographyAt(contextEl)));
+            editor.execCommand('insertHTML', cleanHtml(html));
             if (restoreNonEditable(editor.editorArea)) editor.notifyContentChange();
         };
 
