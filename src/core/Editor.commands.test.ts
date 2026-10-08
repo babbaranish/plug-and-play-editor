@@ -1,6 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { Editor } from './Editor';
 import { ButtonBlockPlugin, BUTTON_BLOCK_OPEN_COMMAND, openButtonDialog } from '../plugins/button-block';
+import { SourceCodePlugin } from '../plugins/source-code';
+import { CodeBlockPlugin } from '../plugins/code-block';
 
 const editors: Editor[] = [];
 
@@ -104,5 +106,67 @@ describe('Editor command registry', () => {
         const modal = second.container.querySelector('.play-editor-modal')!;
         modal.querySelector<HTMLButtonElement>('.play-editor-modal-submit')!.click();
         expect(second.editorArea.querySelector('.play-editor-button-block a')!.getAttribute('href')).toBe('https://pay.test');
+    });
+});
+
+describe('Editor destroy', () => {
+    const forget = (ed: Editor) => editors.splice(editors.indexOf(ed), 1);
+
+    it('runs no input subscriber when destroying closes an open Source Code view', async () => {
+        const ed = mount('<p>x</p>', [SourceCodePlugin]);
+        const sub = vi.fn();
+        ed.onInput(sub);
+        ed.toolbar.querySelector<HTMLButtonElement>('button[title="Source Code"]')!.click();
+        expect(ed.hasActiveContentSource()).toBe(true);
+        ed.destroy();
+        forget(ed);
+        await frame();
+        await frame();
+        expect(sub).not.toHaveBeenCalled();
+    });
+
+    it('runs no input subscriber when destroying closes an open Toggle HTML Source view', async () => {
+        const ed = mount('<p>x</p>', [CodeBlockPlugin]);
+        const sub = vi.fn();
+        ed.onInput(sub);
+        ed.container.querySelector<HTMLButtonElement>('button.play-editor-btn[title="Toggle HTML Source"]')!.click();
+        expect(ed.hasActiveContentSource()).toBe(true);
+        ed.destroy();
+        forget(ed);
+        await frame();
+        await frame();
+        expect(sub).not.toHaveBeenCalled();
+    });
+
+    it('drops an input frame that was already pending', async () => {
+        const ed = mount('<p>x</p>', []);
+        const sub = vi.fn();
+        ed.onInput(sub);
+        ed.editorArea.dispatchEvent(new Event('input', { bubbles: true }));
+        ed.destroy();
+        forget(ed);
+        await frame();
+        expect(sub).not.toHaveBeenCalled();
+    });
+
+    it('schedules nothing for a content source released after destroy', async () => {
+        const ed = mount('<p>x</p>', []);
+        const sub = vi.fn();
+        ed.onInput(sub);
+        const off = ed.registerContentSource(() => 'raw');
+        ed.destroy();
+        forget(ed);
+        off();
+        await frame();
+        expect(sub).not.toHaveBeenCalled();
+    });
+
+    it('still runs the subscribers of an editor that is alive', async () => {
+        const ed = mount('<p>x</p>', []);
+        const sub = vi.fn();
+        ed.onInput(sub);
+        ed.editorArea.dispatchEvent(new Event('input', { bubbles: true }));
+        await frame();
+        expect(sub).toHaveBeenCalledTimes(1);
     });
 });

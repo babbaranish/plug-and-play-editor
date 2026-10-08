@@ -222,11 +222,20 @@ function mountModal(
 
 const BARE_URL_VALUE = /^\s*(?:[a-z][a-z0-9+.-]*:(?:\/\/)?)?\s*$/i;
 
+function replacedSpan(input: HTMLInputElement): [number, number] {
+    const value = input.value;
+    if (input.type === 'url' && BARE_URL_VALUE.test(value)) return [0, value.length];
+    return [input.selectionStart ?? value.length, input.selectionEnd ?? value.length];
+}
+
+function replacesWholeValue(input: HTMLInputElement): boolean {
+    const [start, end] = replacedSpan(input);
+    return !(input.value.slice(0, start) + input.value.slice(end)).trim();
+}
+
 function insertTextIntoInput(input: HTMLInputElement, text: string) {
     const value = input.value;
-    const whole = input.type === 'url' && BARE_URL_VALUE.test(value);
-    const start = whole ? 0 : input.selectionStart ?? value.length;
-    const end = whole ? value.length : input.selectionEnd ?? value.length;
+    const [start, end] = replacedSpan(input);
     input.value = value.slice(0, start) + text + value.slice(end);
     input.focus();
     const newPos = start + text.length;
@@ -274,7 +283,7 @@ function attachChipPaste(input: HTMLInputElement, tokens: NonNullable<ModalField
         e.preventDefault();
         const fallback = `${tokens.open}${chip.key}${tokens.close}`;
         let text = fallback;
-        if (tokens.pasteText) {
+        if (tokens.pasteText && replacesWholeValue(input)) {
             try {
                 text = tokens.pasteText(chip.key, chipLabel(chip.text, tokens.open, tokens.close)) || fallback;
             } catch {

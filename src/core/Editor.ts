@@ -36,6 +36,7 @@ export class Editor {
     private inputSubs: (() => void)[] = [];
     private selectionFramePending = false;
     private inputFramePending = false;
+    private destroyed = false;
     private recorderHandle: ObserverHandle | null = null;
     private recorderPaused = false;
     private commands: Map<string, (...args: any[]) => unknown> = new Map();
@@ -183,10 +184,11 @@ export class Editor {
     }
 
     private scheduleInputSubs() {
-        if (!this.inputSubs.length || this.inputFramePending) return;
+        if (this.destroyed || !this.inputSubs.length || this.inputFramePending) return;
         this.inputFramePending = true;
         requestAnimationFrame(() => {
             this.inputFramePending = false;
+            if (this.destroyed) return;
             for (const fn of this.inputSubs) fn();
         });
     }
@@ -552,6 +554,10 @@ export class Editor {
 
     /** Tear down the editor, remove DOM elements, and clean up all plugins */
     public destroy() {
+        this.destroyed = true;
+        this.inputSubs = [];
+        this.selectionSubs = [];
+
         // Stop transform recording before plugin teardown so observer mutations
         // produced by cleanup don't get captured as phantom edits.
         if (this.recorderHandle) {

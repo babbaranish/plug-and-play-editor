@@ -222,6 +222,37 @@ describe('Button URL field', () => {
         expect(errorText(ed)).toContain('Enter a link starting with http, https or mailto');
         expect(blockOf(ed)).toBeNull();
     });
+
+    it('writes every variable inside an address that resolves as its key', () => {
+        const ed = mount('<p id="p">Pay</p>');
+        select(ed.editorArea.querySelector('#p')!.firstChild!, 3);
+        insertWithUrl(ed, 'https://pay.test/?to={{Login Link}}&n={{FIRST_NAME}}&k={{magic_link}}');
+        expect(errorText(ed)).toBe('');
+        expect(anchorOf(ed)!.getAttribute('href')).toBe('https://pay.test/?to={{login_url}}&n={{first_name}}&k={{magic_link}}');
+        expect(anchorOf(ed)!.hasAttribute('data-href-token')).toBe(false);
+    });
+
+    it('refuses a label inside an address that resolves to nothing, and names it', () => {
+        const ed = mount('<p id="p">Pay</p>');
+        select(ed.editorArea.querySelector('#p')!.firstChild!, 3);
+        insertWithUrl(ed, 'https://pay.test/?to={{Hostel Fee, Link 1: Payment link}}');
+        expect(errorText(ed)).toBe('"Hostel Fee, Link 1: Payment link" is not one of the variables available here. Pick it from the { } list beside the Button URL field.');
+        expect(blockOf(ed)).toBeNull();
+    });
+
+    it('refuses a shared label inside an address', () => {
+        const ed = mount('<p id="p">Pay</p>', {
+            tokens: [
+                { key: `Fee:${UUID}:link-1:PaymentLink`, label: 'Fee, Link 1: Payment link' },
+                { key: 'Fee:0b9e1a2c-1111-4222-8333-444455556666:link-1:PaymentLink', label: 'Fee, Link 1: Payment link' }
+            ],
+            isDestinationToken: isPaymentLink
+        });
+        select(ed.editorArea.querySelector('#p')!.firstChild!, 3);
+        insertWithUrl(ed, 'https://pay.test/?to={{Fee, Link 1: Payment link}}');
+        expect(errorText(ed)).toContain('"Fee, Link 1: Payment link" matches more than one variable');
+        expect(blockOf(ed)).toBeNull();
+    });
 });
 
 describe('Edit Button', () => {
@@ -303,6 +334,28 @@ describe('Edit Button', () => {
         expect(hint(ed)!.className).toContain('play-editor-modal-hint-error');
         submit(ed);
         expect(errorText(ed)).toContain('"Hostel Fee, Link 1: Payment link"');
+    });
+
+    it('writes the key when the label it shows becomes part of an address', () => {
+        const ed = mount(existingBlock('href="{{login_url}}"'));
+        anchorOf(ed)!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        expect(field(ed, 'url')!.value).toBe('{{Login Link}}');
+        setValue(ed, 'url', `https://go.example/?to=${field(ed, 'url')!.value}`);
+        submit(ed);
+        expect(errorText(ed)).toBe('');
+        expect(anchorOf(ed)!.getAttribute('href')).toBe('https://go.example/?to={{login_url}}');
+        expect(anchorOf(ed)!.hasAttribute('data-href-token')).toBe(false);
+    });
+
+    it('writes the key of a label the lists do not contain when it becomes part of an address', () => {
+        const ed = mount('<p id="p">Pay</p>', { tokens: [], isDestinationToken: isPaymentLink });
+        openButtonDialog(ed, { token: { key: FEE, label: 'Tuition, Link 1: Payment link' } });
+        setValue(ed, 'url', `https://go.example/?to=${field(ed, 'url')!.value}`);
+        expect(hint(ed)!.style.display).toBe('none');
+        submit(ed);
+        expect(errorText(ed)).toBe('');
+        expect(anchorOf(ed)!.getAttribute('href')).toBe(`https://go.example/?to={{${FEE}}}`);
+        expect(anchorOf(ed)!.hasAttribute('data-href-token')).toBe(false);
     });
 });
 
@@ -608,6 +661,19 @@ describe('Button URL hint', () => {
         expect(hint(ed)!.style.display).toBe('none');
     });
 
+    it('flags a label inside an address that resolves to nothing', () => {
+        const ed = mount('<p id="p">Pay</p>');
+        select(ed.editorArea.querySelector('#p')!.firstChild!, 3);
+        clickInsertButton(ed);
+        setValue(ed, 'url', 'https://pay.test/?to={{Hostel Fee}}');
+        expect(hint(ed)!.textContent).toBe('"Hostel Fee" is not a known variable. Pick one from the { } list beside this field.');
+        expect(hint(ed)!.className).toContain('play-editor-modal-hint-error');
+        expect(hint(ed)!.style.display).toBe('');
+
+        setValue(ed, 'url', 'https://pay.test/?to={{Login Link}}');
+        expect(hint(ed)!.style.display).toBe('none');
+    });
+
     it('updates after a pick from the { } list, which replaces a bare https://', () => {
         const ed = mount('<p id="p">Pay</p>');
         select(ed.editorArea.querySelector('#p')!.firstChild!, 3);
@@ -667,6 +733,32 @@ describe('Pasting a chip into the button dialog', () => {
         const url = field(ed, 'url')!;
         paste(url, chipHtml(FEE, 'Fee, Link 1: Payment link'), '{{Fee, Link 1: Payment link}}');
         expect(url.value).toBe(`{{${FEE}}}`);
+    });
+
+    it('writes the key when the chip lands inside an address', () => {
+        const ed = mount('<p id="p">Pay</p>');
+        select(ed.editorArea.querySelector('#p')!.firstChild!, 3);
+        clickInsertButton(ed);
+        const url = field(ed, 'url')!;
+        url.value = 'https://pay.test/?to=';
+        url.setSelectionRange(url.value.length, url.value.length);
+        expect(paste(url, chipHtml('login_url', 'Login Link'), '{{Login Link}}').defaultPrevented).toBe(true);
+        expect(url.value).toBe('https://pay.test/?to={{login_url}}');
+
+        url.setSelectionRange(0, 0);
+        paste(url, chipHtml(FEE, LABEL), `{{${LABEL}}}`);
+        expect(url.value).toBe(`{{${FEE}}}https://pay.test/?to={{login_url}}`);
+    });
+
+    it('writes the label when the chip replaces the whole address', () => {
+        const ed = mount('<p id="p">Pay</p>');
+        select(ed.editorArea.querySelector('#p')!.firstChild!, 3);
+        clickInsertButton(ed);
+        const url = field(ed, 'url')!;
+        url.value = 'https://pay.test/old';
+        url.setSelectionRange(0, url.value.length);
+        paste(url, chipHtml(FEE, LABEL), `{{${LABEL}}}`);
+        expect(url.value).toBe(`{{${LABEL}}}`);
     });
 
     it('writes the key into the text field, where a label would never be filled in', () => {

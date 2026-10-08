@@ -11,6 +11,7 @@ import {
     isTokenKeyShaped,
     mayHoldTokenDestination,
     readTokenSource,
+    resolveEmbeddedTokens,
     tokenDisplayText,
     tokenOnlyUrl,
     tokenReferenceMatches,
@@ -240,10 +241,14 @@ function refuseUnknownToken(inner: string, ambiguous: boolean, ctx: ButtonDialog
 
 function resolveButtonUrl(url: string, ctx: ButtonDialogContext): { url: string; hrefToken: string | null } | string {
     const { tokenOpen, tokenClose } = ctx;
-    if (isValidUrl(url)) return { url, hrefToken: null };
     const inner = tokenOnlyUrl(url, tokenOpen, tokenClose);
     if (inner === null) {
-        return `Enter a link starting with http, https or mailto, or a single variable such as ${tokenOpen}login_url${tokenClose}.`;
+        const embedded = resolveEmbeddedTokens(url, ctx.known, tokenOpen, tokenClose, ctx.exact);
+        if (!isValidUrl(embedded.url)) {
+            return `Enter a link starting with http, https or mailto, or a single variable such as ${tokenOpen}login_url${tokenClose}.`;
+        }
+        if (embedded.unknown) return refuseUnknownToken(embedded.unknown.name, embedded.unknown.ambiguous, ctx);
+        return { url: embedded.url, hrefToken: null };
     }
     let key: string;
     if (ctx.exact && url === ctx.exact.display) {
@@ -636,7 +641,11 @@ export function createButtonBlockPlugin(options?: ButtonBlockPluginOptions): Plu
             const unsubscribeInput = editor.onInput(() => {
                 canonicalize();
             });
-            canonicalize();
+            if (canonicalize()) {
+                requestAnimationFrame(() => {
+                    if (!destroyed) editor.notifyContentChange();
+                });
+            }
 
             editor.onDestroy(() => {
                 destroyed = true;

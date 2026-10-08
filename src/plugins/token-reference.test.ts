@@ -6,7 +6,8 @@ import {
     tokenDisplayText,
     tokenUrlHint,
     canonicalHrefToken,
-    displayUrlForTest
+    displayUrlForTest,
+    resolveEmbeddedTokens
 } from './links';
 import { generateButtonHtmlForTest } from './button-block';
 
@@ -95,6 +96,83 @@ describe('tokenUrlHint', () => {
         const exact = { key: FEE, label: 'Tuition, Link 1: Payment link', display: '{{Tuition, Link 1: Payment link}}' };
         expect(tokenUrlHint('{{Tuition, Link 1: Payment link}}', { ...options, tokens: [], exact }))
             .toEqual({ text: 'Links to Tuition, Link 1: Payment link', tone: 'ok' });
+    });
+
+    it('flags a label inside an address that resolves to nothing, and names it', () => {
+        expect(tokenUrlHint('https://go.example/?to={{Hostel Fee}}', options)).toEqual({
+            text: '"Hostel Fee" is not a known variable. Pick one from the { } list beside this field.',
+            tone: 'error'
+        });
+        expect(tokenUrlHint('{{Hostel Fee}}?ref=mail', { ...options, pickerHasItems: false })).toEqual({
+            text: '"Hostel Fee" is not a known variable. Copy it exactly as it appears in the email body.',
+            tone: 'error'
+        });
+        expect(tokenUrlHint('https://go.example/?to={{Hostel Fee}}', { ...options, tokens: [] })).toEqual({
+            text: '"Hostel Fee" is not a known variable. No variables are available here yet.',
+            tone: 'error'
+        });
+    });
+
+    it('flags a shared label inside an address', () => {
+        const shared = [{ key: 'a', label: 'Same Label' }, { key: 'b', label: 'Same Label' }];
+        expect(tokenUrlHint('https://go.example/?to={{Same Label}}', { ...options, tokens: shared })).toEqual({
+            text: '"Same Label" matches more than one variable. Pick one from the { } list beside this field.',
+            tone: 'error'
+        });
+    });
+
+    it('says nothing for an address whose variables resolve or are shaped like keys', () => {
+        expect(tokenUrlHint(`https://go.example/?to={{${LABEL}}}`, options)).toBeNull();
+        expect(tokenUrlHint('https://go.example/?to={{magic_link}}', options)).toBeNull();
+    });
+});
+
+describe('resolveEmbeddedTokens', () => {
+    const tokens = [...FEES, { key: 'login_url', label: 'Login Link' }];
+
+    it('writes every variable inside an address that resolves as its key', () => {
+        expect(resolveEmbeddedTokens('https://go.example/?to={{Login Link}}&fee={{admission fee, link 1: payment link}}', tokens, '{{', '}}'))
+            .toEqual({ url: `https://go.example/?to={{login_url}}&fee={{${FEE}}}`, unknown: null });
+        expect(resolveEmbeddedTokens('{{LOGIN_URL}}?ref=mail', tokens, '{{', '}}'))
+            .toEqual({ url: '{{login_url}}?ref=mail', unknown: null });
+    });
+
+    it('keeps exact keys and unknown names shaped like keys as typed', () => {
+        expect(resolveEmbeddedTokens('https://x.test/{{login_url}}/{{magic_link}}?a={{}}', tokens, '{{', '}}'))
+            .toEqual({ url: 'https://x.test/{{login_url}}/{{magic_link}}?a={{}}', unknown: null });
+    });
+
+    it('names the first label that resolves to nothing', () => {
+        expect(resolveEmbeddedTokens('https://x.test/?a={{Login Link}}&b={{Hostel Fee}}&c={{Other Fee}}', tokens, '{{', '}}'))
+            .toEqual({ url: 'https://x.test/?a={{login_url}}&b={{Hostel Fee}}&c={{Other Fee}}', unknown: { name: 'Hostel Fee', ambiguous: false } });
+    });
+
+    it('marks a label two variables share as ambiguous', () => {
+        const shared = [{ key: 'a', label: 'Same Label' }, { key: 'b', label: 'Same Label' }];
+        expect(resolveEmbeddedTokens('https://x.test/?a={{Same Label}}', shared, '{{', '}}').unknown)
+            .toEqual({ name: 'Same Label', ambiguous: true });
+    });
+
+    it('maps the label the dialog was opened with to its key', () => {
+        const exact = { key: FEE, label: 'Tuition, Link 1: Payment link', display: '{{Tuition, Link 1: Payment link}}' };
+        expect(resolveEmbeddedTokens('https://x.test/?to={{Tuition, Link 1: Payment link}}', [], '{{', '}}', exact))
+            .toEqual({ url: `https://x.test/?to={{${FEE}}}`, unknown: null });
+    });
+
+    it('uses the configured delimiters', () => {
+        expect(resolveEmbeddedTokens('https://x.test/?to={Login Link}', tokens, '{', '}'))
+            .toEqual({ url: 'https://x.test/?to={login_url}', unknown: null });
+        expect(resolveEmbeddedTokens('https://x.test/?to=%Login Link%', tokens, '%', '%'))
+            .toEqual({ url: 'https://x.test/?to=%login_url%', unknown: null });
+    });
+
+    it('does not mistake percent escapes for percent delimited variables', () => {
+        expect(resolveEmbeddedTokens('https://x.test/a%20b?q=hello%20world&r=%2Fpath', tokens, '%', '%'))
+            .toEqual({ url: 'https://x.test/a%20b?q=hello%20world&r=%2Fpath', unknown: null });
+        expect(resolveEmbeddedTokens('https://x.test/a%20b?q=hello%20world&to=%Login Link%', tokens, '%', '%'))
+            .toEqual({ url: 'https://x.test/a%20b?q=hello%20world&to=%login_url%', unknown: null });
+        expect(resolveEmbeddedTokens('https://x.test/?to=%Login Lnk%', tokens, '%', '%').unknown)
+            .toEqual({ name: 'Login Lnk', ambiguous: false });
     });
 });
 

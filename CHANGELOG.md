@@ -33,16 +33,21 @@ pre-1.0 (minor versions may contain breaking changes).
   says whether a source view currently holds the content.
 - **Stored destinations are tidied.** The button and link plugins rewrite an
   anchor whose destination is a label (also with percent encoded braces or
-  non breaking spaces) to the canonical key, and move an exact destination key
-  out of `href`. Exact keys that are not destinations, labels shared by two
+  non breaking spaces) to the canonical key: a destination goes in
+  `data-href-token`, any other variable stays raw in `href` as `{{key}}`, the
+  form every renderer substitutes. An exact destination key is moved out of
+  `href`. Exact keys that are not destinations, labels shared by two
   variables and anything unknown are left alone. This runs when the plugin
   starts, after each edit, when a source view closes (never while a source
   view or the preview is open), and through
   `BUTTON_BLOCK_CANONICALIZE_COMMAND` (`'button-block:canonicalize'`) and
   `LINKS_CANONICALIZE_COMMAND` (`'links:canonicalize'`), which return whether
-  anything changed. A content change is reported only when it did.
-  `LinksPluginOptions.isDestinationToken` decides which exact keys the links
-  plugin moves.
+  anything changed. A content change is reported only when it did. A change
+  made when the plugin starts, inside the `Editor` constructor, is reported
+  once more on the next frame (unless the editor was destroyed by then), so a
+  listener attached after construction, such as `PlayEditor`'s `onChange`,
+  hears it. `LinksPluginOptions.isDestinationToken` decides which exact keys
+  the links plugin moves.
 - **A selected chip becomes a button.** With exactly one token chip selected,
   Insert Button prefills the URL with that chip and replaces the chip with the
   button.
@@ -52,12 +57,14 @@ pre-1.0 (minor versions may contain breaking changes).
   (`{ text, tone }`).
 - **Pasting a chip into a URL field writes something that resolves.** A copied
   chip pastes as its visible text, which is its label. A URL field now
-  receives `{{label}}` when that label leads back to the chip's key and
-  `{{key}}` otherwise; text fields receive `{{key}}`. The copied HTML decides:
-  one editor chip (`.play-editor-token`) and no other text is taken over,
-  whatever plain text came with it, while a chip inside a sentence is left to
-  the browser. Plain text pastes are
-  untouched. Available to any form as `ModalField.tokens.pasteText(key, label)`.
+  receives `{{label}}` when the chip replaces the whole value and that label
+  leads back to the chip's key, and `{{key}}` otherwise, so a chip pasted into
+  the middle of an address never leaves a label in it; text fields receive
+  `{{key}}`. The copied HTML decides: one editor chip (`.play-editor-token`)
+  and no other text is taken over, whatever plain text came with it, while a
+  chip inside a sentence is left to the browser. Plain text pastes are
+  untouched. Available to any form as `ModalField.tokens.pasteText(key, label)`,
+  which is consulted only when the chip replaces the whole value.
 - Exported helpers: `tokenOnlyUrl`, `resolveTokenReference`,
   `normalizeTokenHref` (decodes `%7B` and `%7D` in any case, `%20`, `%2C`, `%3A`
   and non breaking spaces, for matching only) and `DELIMITER_MAP`.
@@ -68,14 +75,28 @@ pre-1.0 (minor versions may contain breaking changes).
   used to be accepted and written into `href` as typed, so a chip's label went
   out as a link nothing could fill in. The refusal names the value and points
   at the `{ }` list. A value shaped like a key is still accepted as before.
+- **A variable inside an address is written as its key.** Edit Link and Edit
+  Button show `{{label}}`, and an address built around it, such as
+  `{{Login Link}}?ref=mail` or `https://go.example/?to={{Login Link}}`, would
+  otherwise keep the label in `href`, where nothing fills it in. Both dialogs
+  now write each `{{X}}` inside an address as `{{K}}` when X is a key, a key in
+  other case or a label that belongs to only one variable. A label that
+  matches nothing, or more than one variable, is refused with a message that
+  names it, and the URL hint flags it as you type. An unknown value shaped like
+  a key is kept as typed, as before. With the `percent` delimiter, a `%`
+  followed by two hex digits that matches no variable is read as a URL escape.
 - **The link bubble and Edit Link show a variable's label.** A destination
   shows `{{label}}` in a token style when the label leads back to the key,
   otherwise `{{key}}`. A label that matches nothing is shown in red with
   "Not a known variable".
 - **Edit Link keeps a destination it did not change.** Saving a link whose URL
   field still shows its original variable keeps that key, even when the host
-  lists do not contain it. It used to refuse, and the only way out was to clear
-  the URL, which dropped the payment link.
+  lists do not contain it, whether the key sits in `data-href-token` or alone
+  in `href`, and stores it in `data-href-token` as the dialog does for any URL
+  that is only a variable. This covers values shaped like a key (letters,
+  digits, `_ . $ : -`); a stored label that matches nothing is still refused.
+  It used to refuse, and the only way out was to clear the URL, which dropped
+  the payment link.
 - Picking a variable from the `{ }` list into a URL field that holds only
   `https://` (or another bare scheme) replaces it instead of producing
   `https://{{key}}`.
@@ -84,6 +105,10 @@ pre-1.0 (minor versions may contain breaking changes).
   subscribers saw the new content only at the next keystroke. Releasing the
   active content source now runs them once on the next frame, which is what
   tidies a label typed into an href in either view as soon as it closes.
+  No subscriber runs after `destroy()`: it drops the `onInput` and
+  `onSelectionChange` subscribers, and an input frame still pending does
+  nothing, so destroying an editor while a source view is open no longer calls
+  them on the torn down editor.
 
 ### Fixed
 

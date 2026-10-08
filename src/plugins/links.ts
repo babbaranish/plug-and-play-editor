@@ -213,6 +213,48 @@ export interface ExactToken {
     label?: string;
 }
 
+export interface EmbeddedTokens {
+    url: string;
+    unknown: { name: string; ambiguous: boolean } | null;
+}
+
+const PERCENT_ESCAPE = /^[0-9A-Fa-f]{2}/;
+
+export function resolveEmbeddedTokens(
+    url: string,
+    tokens: Token[],
+    open: string,
+    close: string,
+    exact: ExactToken | null = null
+): EmbeddedTokens {
+    const exactName = exact ? tokenOnlyUrl(exact.display, open, close) : null;
+    let out = '';
+    let unknown: EmbeddedTokens['unknown'] = null;
+    let from = 0;
+    let at = url.indexOf(open);
+    while (at !== -1) {
+        const end = url.indexOf(close, at + open.length);
+        if (end === -1) break;
+        const name = url.slice(at + open.length, end);
+        const trimmed = name.trim();
+        const keys = exact && trimmed === exactName ? [exact.key] : tokenReferenceMatches(name, tokens);
+        if (keys.length !== 1 && open === '%' && PERCENT_ESCAPE.test(name)) {
+            at = url.indexOf(open, at + open.length);
+            continue;
+        }
+        out += url.slice(from, at);
+        if (keys.length === 1) {
+            out += `${open}${keys[0]}${close}`;
+        } else {
+            out += url.slice(at, end + close.length);
+            if (!unknown && trimmed && !isTokenKeyShaped(trimmed)) unknown = { name: trimmed, ambiguous: keys.length > 1 };
+        }
+        from = end + close.length;
+        at = url.indexOf(open, from);
+    }
+    return { url: out + url.slice(from), unknown };
+}
+
 export interface TokenUrlHintOptions {
     tokens: Token[];
     open: string;
@@ -225,16 +267,23 @@ export interface TokenUrlHintOptions {
 export function tokenUrlHint(value: string, options: TokenUrlHintOptions): ModalFieldHint | null {
     const { tokens, open, close, exact } = options;
     const url = value.trim();
-    const inner = url ? tokenOnlyUrl(url, open, close) : null;
-    if (inner === null) return null;
+    if (!url) return null;
+    const advice = options.pickerHasItems
+        ? 'Pick one from the { } list beside this field.'
+        : 'Copy it exactly as it appears in the email body.';
+    const inner = tokenOnlyUrl(url, open, close);
+    if (inner === null) {
+        const unknown = resolveEmbeddedTokens(url, tokens, open, close, exact).unknown;
+        if (!unknown) return null;
+        if (unknown.ambiguous) return { text: `"${unknown.name}" matches more than one variable. ${advice}`, tone: 'error' };
+        const fix = tokens.length === 0 ? 'No variables are available here yet.' : advice;
+        return { text: `"${unknown.name}" is not a known variable. ${fix}`, tone: 'error' };
+    }
     if (exact && url === exact.display) {
         return { text: `Links to ${tokenName(exact.key, tokens, open, close, exact.label)}`, tone: 'ok' };
     }
     const matches = tokenReferenceMatches(inner, tokens);
     if (matches.length === 1) return { text: `Links to ${tokenName(matches[0], tokens, open, close)}`, tone: 'ok' };
-    const advice = options.pickerHasItems
-        ? 'Pick one from the { } list beside this field.'
-        : 'Copy it exactly as it appears in the email body.';
     if (matches.length > 1) return { text: `This matches more than one variable. ${advice}`, tone: 'error' };
     if (options.keepUnknownKeys && isTokenKeyShaped(inner)) {
         return { text: 'Not in the variable list. It will be used exactly as typed.' };
@@ -312,8 +361,17 @@ export function displayUrlForTest(a: HTMLAnchorElement, open: string, close: str
     return displayUrl(a, open, close, tokens);
 }
 
-function displayUrl(a: HTMLAnchorElement, open: string, close: string, tokens: Token[] = []): string {
+function editableDestinationKey(a: HTMLAnchorElement, tokens: Token[], open: string, close: string): string | null {
     const key = destinationKeyOf(a, tokens, open, close);
+    if (key) return key;
+    const stored = a.getAttribute('data-href-token');
+    if (stored !== null && stored.trim()) return null;
+    const inner = tokenOnlyUrl(normalizeTokenHref(a.getAttribute('href') ?? ''), open, close);
+    return inner !== null && isTokenKeyShaped(inner) ? inner : null;
+}
+
+function displayUrl(a: HTMLAnchorElement, open: string, close: string, tokens: Token[] = []): string {
+    const key = editableDestinationKey(a, tokens, open, close);
     if (key) return tokenDisplayText(key, tokens, open, close);
     const token = a.getAttribute('data-href-token');
     return token ? `${open}${token}${close}` : a.getAttribute('href') || '';
@@ -361,7 +419,7 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                 const selectedText = savedRange ? savedRange.toString() : '';
                 const editable = anchor ? isPlainTextAnchor(anchor) : true;
                 const currentText = anchor ? anchor.textContent ?? '' : selectedText;
-                const originalKey = anchor ? destinationKeyOf(anchor, known, tokenOpen, tokenClose) : null;
+                const originalKey = anchor ? editableDestinationKey(anchor, known, tokenOpen, tokenClose) : null;
                 const original: ExactToken | null = originalKey
                     ? { key: originalKey, display: tokenDisplayText(originalKey, known, tokenOpen, tokenClose) }
                     : null;
@@ -427,10 +485,19 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                         const chosen = tokenOnlyUrl(url, tokenOpen, tokenClose);
                         if (chosen && original && url === original.display) {
                             url = `${tokenOpen}${original.key}${tokenClose}`;
-                        } else if (chosen) {
+                        } else {
                             const acceptable = resolveAcceptable();
-                            const match = resolveTokenReference(chosen, acceptable);
-                            if (!match) {
+                            let unknown: string | null = null;
+                            if (chosen) {
+                                const match = resolveTokenReference(chosen, acceptable);
+                                if (match) url = `${tokenOpen}${match}${tokenClose}`;
+                                else unknown = chosen;
+                            } else {
+                                const embedded = resolveEmbeddedTokens(url, acceptable, tokenOpen, tokenClose, original);
+                                url = embedded.url;
+                                unknown = embedded.unknown?.name ?? null;
+                            }
+                            if (unknown !== null) {
                                 // Say WHICH way it failed. "Not a variable" reads
                                 // the same whether the name is wrong or the list
                                 // never loaded, and those need opposite responses
@@ -438,11 +505,10 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                                 showError(
                                     acceptable.length === 0
                                         ? 'No variables are available here yet. Close this, let the page finish loading, and try again.'
-                                        : `"${chosen}" is not one of the ${acceptable.length} variables available here. Click the ${'{ }'} button beside this field, or copy the token exactly as it appears in the email body.`
+                                        : `"${unknown}" is not one of the ${acceptable.length} variables available here. Click the ${'{ }'} button beside this field, or copy the token exactly as it appears in the email body.`
                                 );
                                 return;
                             }
-                            url = `${tokenOpen}${match}${tokenClose}`;
                         }
 
                         const text = editable ? values.text.trim() : '';
@@ -773,7 +839,12 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                     const key = canonicalHrefToken(a, known, tokenOpen, tokenClose, isDestination);
                     if (!key) return;
                     const before = anchorDestinationState(a);
-                    applyLinkAttrs(a, `${tokenOpen}${key}${tokenClose}`, tokenOpen, tokenClose);
+                    if (isDestination(key)) {
+                        applyLinkAttrs(a, `${tokenOpen}${key}${tokenClose}`, tokenOpen, tokenClose);
+                    } else {
+                        a.removeAttribute('data-href-token');
+                        a.setAttribute('href', `${tokenOpen}${key}${tokenClose}`);
+                    }
                     if (anchorDestinationState(a) !== before) changed = true;
                 });
                 if (changed) editor.notifyContentChange();
@@ -784,7 +855,11 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
             const unsubscribeInput = editor.onInput(() => {
                 canonicalize();
             });
-            canonicalize();
+            if (canonicalize()) {
+                requestAnimationFrame(() => {
+                    if (!destroyed) editor.notifyContentChange();
+                });
+            }
 
             editor.onDestroy(() => {
                 destroyed = true;

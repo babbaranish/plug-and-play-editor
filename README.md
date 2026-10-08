@@ -305,7 +305,7 @@ Supported field types: `text`, `url`, `textarea`, `color`, `number`, `select`. A
 Two optional field settings help with variables:
 
 - `hint: (value) => ({ text, tone }) | null` shows a short line under the field and is re-evaluated as the value changes, including after a pick from the `{ }` list. `tone` is `'ok'`, `'error'` or omitted for a neutral line; return `null` to show nothing.
-- `tokens.pasteText: (key, label) => string` decides what a pasted token chip becomes. When the copied HTML holds exactly one chip (an element with `data-token` or `data-key`) and no other text, the field receives `pasteText(key, label)` instead of the chip's visible text, whatever plain text came with it. Without it the field receives `{{key}}`. Plain text pastes are never touched.
+- `tokens.pasteText: (key, label) => string` decides what a pasted token chip becomes when it replaces the whole value. When the copied HTML holds exactly one chip (an element with `data-token` or `data-key`) and no other text, the field receives `pasteText(key, label)` instead of the chip's visible text, whatever plain text came with it. Pasted beside other text in the field, or without `pasteText`, the chip becomes `{{key}}`. Plain text pastes are never touched.
 
 ---
 
@@ -444,13 +444,13 @@ const links = createLinksPlugin({
 
 `tokens` and `acceptTokens` take an array or a function. An array the host refills in place keeps working, because both are read every time a dialog opens.
 
-**Button URL rules.** An `http`, `https` or `mailto` address is stored in `href` as typed. A value that is exactly one `{{X}}` is matched against `tokens` and `acceptTokens`: by key first, then by a label that belongs to only one variable (case and spacing are ignored). A match `K` is stored in `data-href-token` when `isDestinationToken(K)` is true, otherwise as `href="{{K}}"`. An unknown value shaped like a key (letters, digits, `_ . $ : -`) is still accepted as before. An unknown or shared label is refused with a message that names it and points at the `{ }` list. A hint under the URL field says what the current value links to, or why it will not work.
+**Button URL rules.** An `http`, `https` or `mailto` address is stored in `href`. A value that is exactly one `{{X}}` is matched against `tokens` and `acceptTokens`: by key first, then by a label that belongs to only one variable (case and spacing are ignored). A match `K` is stored in `data-href-token` when `isDestinationToken(K)` is true, otherwise as `href="{{K}}"`. An unknown value shaped like a key (letters, digits, `_ . $ : -`) is still accepted as before. An unknown or shared label is refused with a message that names it and points at the `{ }` list. Each `{{X}}` inside an address, such as `https://go.example/?to={{Login Link}}`, is matched the same way and written into `href` as `{{K}}`; an unknown or shared label there is refused too, and an unknown value shaped like a key is kept as typed. The Link URL field treats variables inside an address the same way. A hint under the URL field says what the current value links to, or why it will not work.
 
 **Editing.** Edit Button reads `data-href-token` first and shows `{{label}}` when that label leads back to the key, otherwise `{{key}}`. Updating without touching the URL keeps the same key even if the lists do not contain it, and a colour or padding change never drops it. Target, rel and the style fields are kept. Edit Link and the link bubble show labels the same way; a link whose destination resolves to nothing is marked in the bubble.
 
 **Inserting.** The block is inserted as a DOM node, never inside a link, after the paragraph or heading the caret is in (before it when the caret is at its start or the paragraph is empty), and at the caret inside table cells, list items and divs. When the button ends the content an empty paragraph follows it for the caret. Selecting a single token chip and clicking Insert Button turns that chip into a button that links to it.
 
-**Pasting a chip.** Pasting a copied chip into the Button URL or Link URL field writes `{{label}}` when that label leads back to the chip's key, otherwise `{{key}}`. The text fields receive `{{key}}`.
+**Pasting a chip.** Pasting a copied chip into the Button URL or Link URL field writes `{{label}}` when the chip replaces the whole value and that label leads back to the chip's key, otherwise `{{key}}`, so a chip pasted into an address adds its key. The text fields receive `{{key}}`.
 
 **Opening the dialog from code.** `openButtonDialog(editor, request)` opens Insert Button prefilled and returns `false` when the editor has no button plugin:
 
@@ -467,7 +467,7 @@ const opened = openButtonDialog(editor, {
 
 `token` wins over `url`, and its label is shown even when the host lists do not contain it. `replace` swaps an element (such as a chip) for the button.
 
-**Tidying stored destinations.** Both plugins rewrite anchors whose destination is a label (including `%7B%7B…%7D%7D` encodings and non breaking spaces) to the canonical key, and move exact destination keys out of `href`. Exact keys that are not destinations, ambiguous labels and anything unknown are left alone. This runs when the plugin starts, after edits, when a source view closes (skipped while a source view or the preview is open), and on demand:
+**Tidying stored destinations.** Both plugins rewrite anchors whose destination is a label (including `%7B%7B…%7D%7D` encodings and non breaking spaces) to the canonical key, a destination into `data-href-token` and any other variable raw in `href` as `{{key}}`, and move exact destination keys out of `href`. Exact keys that are not destinations, ambiguous labels and anything unknown are left alone. This runs when the plugin starts, after edits, when a source view closes (skipped while a source view or the preview is open), and on demand:
 
 ```ts
 import { BUTTON_BLOCK_CANONICALIZE_COMMAND, LINKS_CANONICALIZE_COMMAND } from 'plug-and-play-editor';
