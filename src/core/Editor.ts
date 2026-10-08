@@ -38,6 +38,7 @@ export class Editor {
     private inputFramePending = false;
     private recorderHandle: ObserverHandle | null = null;
     private recorderPaused = false;
+    private commands: Map<string, (...args: any[]) => unknown> = new Map();
     /**
      * When a plugin represents content outside `editorArea` (or inside it in a
      * transformed form) — e.g. SourceCodePlugin's raw-HTML textarea — it
@@ -98,13 +99,7 @@ export class Editor {
         // registered one — otherwise this would sync stale/transformed editorArea.innerHTML.
         const onInput = () => {
             this.textArea.value = this.activeContentSource ? this.activeContentSource() : this.editorArea.innerHTML;
-            if (this.inputSubs.length && !this.inputFramePending) {
-                this.inputFramePending = true;
-                requestAnimationFrame(() => {
-                    this.inputFramePending = false;
-                    for (const fn of this.inputSubs) fn();
-                });
-            }
+            this.scheduleInputSubs();
         };
         this.editorArea.addEventListener('input', onInput);
         this.cleanupFns.push(() => this.editorArea.removeEventListener('input', onInput));
@@ -185,6 +180,15 @@ export class Editor {
 
     private syncContent() {
         this.textArea.value = this.editorArea.innerHTML;
+    }
+
+    private scheduleInputSubs() {
+        if (!this.inputSubs.length || this.inputFramePending) return;
+        this.inputFramePending = true;
+        requestAnimationFrame(() => {
+            this.inputFramePending = false;
+            for (const fn of this.inputSubs) fn();
+        });
     }
 
     private updateActiveStates() {
@@ -374,8 +378,31 @@ export class Editor {
         return () => {
             if (this.activeContentSource === getRawContent) {
                 this.activeContentSource = null;
+                this.scheduleInputSubs();
             }
         };
+    }
+
+    public hasActiveContentSource(): boolean {
+        return this.activeContentSource !== null;
+    }
+
+    public registerCommand(name: string, handler: (...args: any[]) => unknown): () => void {
+        this.commands.set(name, handler);
+        return () => {
+            if (this.commands.get(name) === handler) {
+                this.commands.delete(name);
+            }
+        };
+    }
+
+    public hasCommand(name: string): boolean {
+        return this.commands.has(name);
+    }
+
+    public runCommand<T = unknown>(name: string, ...args: unknown[]): T | undefined {
+        const handler = this.commands.get(name);
+        return handler ? (handler(...args) as T) : undefined;
     }
 
     /**
@@ -539,6 +566,7 @@ export class Editor {
         // Run all cleanup functions (remove event listeners, etc.)
         this.cleanupFns.forEach(fn => fn());
         this.cleanupFns = [];
+        this.commands.clear();
 
         // Restore textarea
         this.textArea.style.display = '';

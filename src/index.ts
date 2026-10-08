@@ -3,7 +3,14 @@ export type { Plugin } from './core/Plugin';
 export { FormattingPlugin, UndoRedoPlugin } from './plugins/formatting';
 export { ListsPlugin } from './plugins/lists';
 export { ColorPlugin } from './plugins/color';
-export { LinksPlugin, createLinksPlugin } from './plugins/links';
+export {
+    LinksPlugin,
+    createLinksPlugin,
+    LINKS_CANONICALIZE_COMMAND,
+    tokenOnlyUrl,
+    resolveTokenReference,
+    normalizeTokenHref
+} from './plugins/links';
 export type { LinksPluginOptions } from './plugins/links';
 export { MediaPlugin } from './plugins/media';
 export { DirectionalityPlugin } from './plugins/directionality';
@@ -19,13 +26,19 @@ export type { MentionsPluginOptions } from './plugins/mentions';
 export { CodeBlockPlugin } from './plugins/code-block';
 export { DateTimePlugin } from './plugins/datetime';
 export { EmojiPlugin } from './plugins/emoji';
-export { TokensPlugin, createTokensPlugin, DEFAULT_EMAIL_TOKENS } from './plugins/tokens';
+export { TokensPlugin, createTokensPlugin, DEFAULT_EMAIL_TOKENS, DELIMITER_MAP } from './plugins/tokens';
 export type { Token, TokensPluginOptions } from './plugins/tokens';
 export { PasteCleanupPlugin } from './plugins/paste-cleanup';
 export { FontSizePlugin } from './plugins/font-size';
 export { SpacingPlugin } from './plugins/spacing';
-export { ButtonBlockPlugin, createButtonBlockPlugin } from './plugins/button-block';
-export type { ButtonBlockPluginOptions } from './plugins/button-block';
+export {
+    ButtonBlockPlugin,
+    createButtonBlockPlugin,
+    openButtonDialog,
+    BUTTON_BLOCK_OPEN_COMMAND,
+    BUTTON_BLOCK_CANONICALIZE_COMMAND
+} from './plugins/button-block';
+export type { ButtonBlockPluginOptions, ButtonDialogRequest } from './plugins/button-block';
 export { ImageResizePlugin } from './plugins/image-resize';
 export { PreviewPlugin, createPreviewPlugin } from './plugins/preview';
 export type { PreviewPluginOptions } from './plugins/preview';
@@ -153,6 +166,7 @@ export type {
 } from './core/selection';
 export type {
     ModalField,
+    ModalFieldHint,
     ModalFieldRow,
     ModalFieldType,
     ModalFieldToken,

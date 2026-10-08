@@ -5,6 +5,110 @@ format follows [Keep a Changelog](https://keepachangelog.com/), and the
 project adheres to [Semantic Versioning](https://semver.org/) while
 pre-1.0 (minor versions may contain breaking changes).
 
+## [0.11.0] - 2026-10-08
+
+### Added
+
+- **Buttons can link to a payment link, stored where it survives.** The
+  button dialog now matches a variable by key or by label, like the link
+  dialog, against `tokens` plus a new `acceptTokens` list, and stores a
+  destination in `data-href-token` with an inert `href="#"`. The host decides
+  which variables are destinations with `isDestinationToken(key)`, which
+  defaults to "the key is in `acceptTokens`". Every other variable on a button
+  stays in `href` as `{{key}}`, exactly as before, because senders that
+  substitute variables in the HTML expect it there. `tokens` and
+  `acceptTokens` take an array or a function and are read every time the
+  dialog opens, so an array the host refills in place keeps working.
+- **`openButtonDialog(editor, request)`** opens Insert Button prefilled with
+  text, URL, a token (a key plus an optional label, shown even when the host
+  lists do not contain it), colours, radius, padding, a range to insert at and
+  an element to replace. It returns `false` when the editor has no button
+  plugin. `ButtonDialogRequest` and `BUTTON_BLOCK_OPEN_COMMAND`
+  (`'button-block:open'`) are exported.
+- **A command registry on the editor.** `registerCommand(name, handler)`
+  returns an unregister function; `hasCommand(name)` and
+  `runCommand(name, ...args)` look commands up. Commands belong to one editor
+  instance and are cleared on `destroy()`. Plugin objects are shared between
+  editors, so this is where per editor actions live. `hasActiveContentSource()`
+  says whether a source view currently holds the content.
+- **Stored destinations are tidied.** The button and link plugins rewrite an
+  anchor whose destination is a label (also with percent encoded braces or
+  non breaking spaces) to the canonical key, and move an exact destination key
+  out of `href`. Exact keys that are not destinations, labels shared by two
+  variables and anything unknown are left alone. This runs when the plugin
+  starts, after each edit, when a source view closes (never while a source
+  view or the preview is open), and through
+  `BUTTON_BLOCK_CANONICALIZE_COMMAND` (`'button-block:canonicalize'`) and
+  `LINKS_CANONICALIZE_COMMAND` (`'links:canonicalize'`), which return whether
+  anything changed. A content change is reported only when it did.
+  `LinksPluginOptions.isDestinationToken` decides which exact keys the links
+  plugin moves.
+- **A selected chip becomes a button.** With exactly one token chip selected,
+  Insert Button prefills the URL with that chip and replaces the chip with the
+  button.
+- **URL hints.** The Button URL and Link URL fields show a line under the field
+  saying what the current value links to, or why it will not work. Available
+  to any form as `ModalField.hint(value)`, returning a `ModalFieldHint`
+  (`{ text, tone }`).
+- **Pasting a chip into a URL field writes something that resolves.** A copied
+  chip pastes as its visible text, which is its label. A URL field now
+  receives `{{label}}` when that label leads back to the chip's key and
+  `{{key}}` otherwise; text fields receive `{{key}}`. The copied HTML decides:
+  one editor chip (`.play-editor-token`) and no other text is taken over,
+  whatever plain text came with it, while a chip inside a sentence is left to
+  the browser. Plain text pastes are
+  untouched. Available to any form as `ModalField.tokens.pasteText(key, label)`.
+- Exported helpers: `tokenOnlyUrl`, `resolveTokenReference`,
+  `normalizeTokenHref` (decodes `%7B` and `%7D` in any case, `%20`, `%2C`, `%3A`
+  and non breaking spaces, for matching only) and `DELIMITER_MAP`.
+
+### Changed
+
+- **Insert Button refuses a label it cannot resolve.** Any single `{{...}}`
+  used to be accepted and written into `href` as typed, so a chip's label went
+  out as a link nothing could fill in. The refusal names the value and points
+  at the `{ }` list. A value shaped like a key is still accepted as before.
+- **The link bubble and Edit Link show a variable's label.** A destination
+  shows `{{label}}` in a token style when the label leads back to the key,
+  otherwise `{{key}}`. A label that matches nothing is shown in red with
+  "Not a known variable".
+- **Edit Link keeps a destination it did not change.** Saving a link whose URL
+  field still shows its original variable keeps that key, even when the host
+  lists do not contain it. It used to refuse, and the only way out was to clear
+  the URL, which dropped the payment link.
+- Picking a variable from the `{ }` list into a URL field that holds only
+  `https://` (or another bare scheme) replaces it instead of producing
+  `https://{{key}}`.
+- **Closing a source view runs the `onInput` subscribers.** Source Code and
+  Toggle HTML Source write their text back without an input event, so
+  subscribers saw the new content only at the next keystroke. Releasing the
+  active content source now runs them once on the next frame, which is what
+  tidies a label typed into an href in either view as soon as it closes.
+
+### Fixed
+
+- **Insert Button now places the block itself.** It used
+  `execCommand('insertHTML')`, which leaves placement to the browser. It now
+  inserts a DOM node: never inside a link, after the paragraph or heading the
+  caret is in (before it when the caret is at its start or the paragraph is
+  empty), and at the caret in table cells, list items and divs. When the button
+  ends the content, a table cell, a list item, a div or a blockquote, an empty
+  paragraph follows it so the caret has somewhere to go after it.
+- **Edit Button lost token destinations.** It read only `href`, so a button
+  with `data-href-token` showed `#` and could not be saved, and saving again
+  dropped the token. It reads `data-href-token` first now, and an update keeps
+  the token, target, rel and style fields; a zero radius or padding no longer
+  turns into the default.
+- **Edit Button did not report its change**, so `PlayEditor`'s `onChange` did
+  not fire until the next keystroke. Insert and Edit both call
+  `notifyContentChange()`.
+- **`resolveTokenReference` counted one variable listed twice as two.** A
+  variable in both `tokens` and `acceptTokens` made its own label ambiguous.
+  Ambiguity is now judged on distinct keys.
+- Insert Button no longer inserts into a source view or the preview; it says
+  how to get back to the editing view. Clicking a button in the preview, or in
+  a read only or disabled editor, no longer opens Edit Button.
+
 ## [0.10.5] - 2026-10-07
 
 ### Fixed

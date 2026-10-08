@@ -302,6 +302,11 @@ openInfoModal(editor, {
 
 Supported field types: `text`, `url`, `textarea`, `color`, `number`, `select`. Arrays of fields render side-by-side as a row.
 
+Two optional field settings help with variables:
+
+- `hint: (value) => ({ text, tone }) | null` shows a short line under the field and is re-evaluated as the value changes, including after a pick from the `{ }` list. `tone` is `'ok'`, `'error'` or omitted for a neutral line; return `null` to show nothing.
+- `tokens.pasteText: (key, label) => string` decides what a pasted token chip becomes. When the copied HTML holds exactly one chip (an element with `data-token` or `data-key`) and no other text, the field receives `pasteText(key, label)` instead of the chip's visible text, whatever plain text came with it. Without it the field receives `{{key}}`. Plain text pastes are never touched.
+
 ---
 
 ## 🔌 Plugins Reference
@@ -332,7 +337,7 @@ Supported field types: `text`, `url`, `textarea`, `color`, `number`, `select`. A
 | **Paste Cleanup** | `PasteCleanupPlugin` | Auto-cleans pasted HTML from Word/Docs, Ctrl+Shift+V for plain text |
 | **Font Size** | `FontSizePlugin` | Font size dropdown (10–48px) with inline style output |
 | **Spacing** | `SpacingPlugin` | Line height & paragraph spacing controls |
-| **Button Block** | `ButtonBlockPlugin` / `createButtonBlockPlugin(options)` | CTA button builder with colors, padding, radius — click to re-edit; a `{ }` picker next to the Text/URL fields inserts template variables, resolved by `PreviewPlugin` in both cases |
+| **Button Block** | `ButtonBlockPlugin` / `createButtonBlockPlugin(options)` | CTA button builder with colors, padding, radius — click to re-edit; a `{ }` picker next to the Text/URL fields inserts template variables, resolved by `PreviewPlugin` in both cases. Destination variables such as payment links are stored in `data-href-token` (see [variables as destinations](#button-block-and-links-variables-as-destinations)) |
 | **Image Resize** | `ImageResizePlugin` | Click images to show resize handles, drag to resize proportionally |
 | **Preview** | `PreviewPlugin` | Preview mode with token replacement and 600px email-width view |
 | **Source Code** | `SourceCodePlugin` | Toggle raw HTML source view with line numbers, syntax highlighting, auto-formatted indentation, and collapsible blocks; disables other toolbar controls in source mode |
@@ -414,6 +419,66 @@ The default `TokensPlugin` export includes common email template variables:
 | `{{preferences_url}}` | Email preferences link |
 | `{{current_year}}` | Current year |
 | `{{current_date}}` | Current date |
+
+#### Button Block and Links: variables as destinations
+
+A button or link can point at a variable instead of an address. Some variables are *destinations*, filled in per recipient by whatever sends the email (a payment link, for example). The editor stores a destination as `data-href-token="<key>"` with an inert `href="#"`, so the key survives copying and editing. Every other variable on a button stays in `href` as `{{key}}`, exactly as before.
+
+```ts
+import { createButtonBlockPlugin, createLinksPlugin } from 'plug-and-play-editor';
+
+const isPaymentLink = (key: string) => /^Fee:[0-9a-f-]{36}:link-\d+:(PaymentLink|PaymentGatewayLink)$/.test(key);
+
+const buttons = createButtonBlockPlugin({
+  tokens: () => [...mergeFields(), ...paymentLinks()],   // the { } list, read each time the dialog opens
+  acceptTokens: () => otherKnownTokens(),                 // matched when typed or pasted, never listed
+  isDestinationToken: isPaymentLink,                      // default: the key is in acceptTokens
+});
+
+const links = createLinksPlugin({
+  tokens: () => mergeFields(),
+  acceptTokens: () => paymentLinks(),
+  isDestinationToken: isPaymentLink,                      // used when tidying exact keys found in an href
+});
+```
+
+`tokens` and `acceptTokens` take an array or a function. An array the host refills in place keeps working, because both are read every time a dialog opens.
+
+**Button URL rules.** An `http`, `https` or `mailto` address is stored in `href` as typed. A value that is exactly one `{{X}}` is matched against `tokens` and `acceptTokens`: by key first, then by a label that belongs to only one variable (case and spacing are ignored). A match `K` is stored in `data-href-token` when `isDestinationToken(K)` is true, otherwise as `href="{{K}}"`. An unknown value shaped like a key (letters, digits, `_ . $ : -`) is still accepted as before. An unknown or shared label is refused with a message that names it and points at the `{ }` list. A hint under the URL field says what the current value links to, or why it will not work.
+
+**Editing.** Edit Button reads `data-href-token` first and shows `{{label}}` when that label leads back to the key, otherwise `{{key}}`. Updating without touching the URL keeps the same key even if the lists do not contain it, and a colour or padding change never drops it. Target, rel and the style fields are kept. Edit Link and the link bubble show labels the same way; a link whose destination resolves to nothing is marked in the bubble.
+
+**Inserting.** The block is inserted as a DOM node, never inside a link, after the paragraph or heading the caret is in (before it when the caret is at its start or the paragraph is empty), and at the caret inside table cells, list items and divs. When the button ends the content an empty paragraph follows it for the caret. Selecting a single token chip and clicking Insert Button turns that chip into a button that links to it.
+
+**Pasting a chip.** Pasting a copied chip into the Button URL or Link URL field writes `{{label}}` when that label leads back to the chip's key, otherwise `{{key}}`. The text fields receive `{{key}}`.
+
+**Opening the dialog from code.** `openButtonDialog(editor, request)` opens Insert Button prefilled and returns `false` when the editor has no button plugin:
+
+```ts
+import { openButtonDialog } from 'plug-and-play-editor';
+
+const opened = openButtonDialog(editor, {
+  text: 'Pay Now',
+  token: { key: 'Fee:3f2a9c1e-5b7d-4e2f-9a10-6c8d2e4f1a3b:link-1:PaymentLink', label: 'Admission Fee, Link 1: Payment link' },
+  range: savedRange,     // defaults to the selection when it is in the editor, else the end of the content
+  // url, bgColor, textColor, borderRadius, paddingV, paddingH, replace: Element
+});
+```
+
+`token` wins over `url`, and its label is shown even when the host lists do not contain it. `replace` swaps an element (such as a chip) for the button.
+
+**Tidying stored destinations.** Both plugins rewrite anchors whose destination is a label (including `%7B%7B…%7D%7D` encodings and non breaking spaces) to the canonical key, and move exact destination keys out of `href`. Exact keys that are not destinations, ambiguous labels and anything unknown are left alone. This runs when the plugin starts, after edits, when a source view closes (skipped while a source view or the preview is open), and on demand:
+
+```ts
+import { BUTTON_BLOCK_CANONICALIZE_COMMAND, LINKS_CANONICALIZE_COMMAND } from 'plug-and-play-editor';
+
+if (editor.hasCommand(BUTTON_BLOCK_CANONICALIZE_COMMAND)) editor.runCommand(BUTTON_BLOCK_CANONICALIZE_COMMAND);
+if (editor.hasCommand(LINKS_CANONICALIZE_COMMAND)) editor.runCommand(LINKS_CANONICALIZE_COMMAND);
+```
+
+Each returns `true` when it changed something, and only then reports a content change.
+
+The helpers behind these rules are exported for hosts that check content themselves: `tokenOnlyUrl(url, open, close)`, `resolveTokenReference(input, tokens)`, `normalizeTokenHref(href)` (decodes encoded braces and spaces for matching only, never for storing) and `DELIMITER_MAP`.
 
 #### Preview — Custom Sample Data
 
@@ -557,11 +622,15 @@ const editor = new Editor(selector: string | HTMLTextAreaElement, plugins: Plugi
 | `addToolbarButton(iconHtml, tooltip, onClick, command?)` | `HTMLButtonElement` | Add a custom toolbar button. Pass `command` to enable active state tracking. |
 | `addToolbarDivider()` | `void` | Add a visual divider to the toolbar |
 | `onSelectionChange(fn)` | `() => void` | Subscribe to selection changes inside the editor. Handler fires at most once per frame (rAF-coalesced) and only when the selection is inside the editor. Returns an unsubscribe function. |
-| `onInput(fn)` | `() => void` | Subscribe to editor input changes. Handler fires at most once per frame, after the backing textarea is synced. Returns an unsubscribe function. |
+| `onInput(fn)` | `() => void` | Subscribe to editor input changes. Handler fires at most once per frame, after the backing textarea is synced, and once after a source view closes. Returns an unsubscribe function. |
 | `getSelection()` | `Selection` | Read the current selection as a structured, path-based value (`caret` / `range` / `none`). DOM-independent. |
 | `setSelection(sel)` | `void` | Write a structured `Selection` back to the DOM. |
 | `resolvePoint(node, offset)` | `Point \| null` | Resolve a DOM `(node, offset)` pair into a structured `Point`, or `null` if the position is outside the editor. |
 | `onDestroy(fn)` | `void` | Register a cleanup function called on `destroy()` |
+| `registerCommand(name, handler)` | `() => void` | Register a named command on this editor (a later registration of the same name wins). Returns an unregister function. Plugins use it to offer actions to other plugins and to the host, such as `'button-block:open'`. Commands are cleared on `destroy()`. |
+| `hasCommand(name)` | `boolean` | Whether a command is registered on this editor |
+| `runCommand(name, ...args)` | `T \| undefined` | Run a command and return its result, or `undefined` when no such command is registered |
+| `hasActiveContentSource()` | `boolean` | `true` while a source view (such as the HTML source) holds the content instead of the editing area |
 | `destroy()` | `void` | Tear down the editor, clean up plugins and event listeners, restore the textarea |
 
 | Property | Type | Description |

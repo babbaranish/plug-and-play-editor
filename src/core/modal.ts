@@ -14,6 +14,11 @@ export interface ModalFieldToken {
     category?: string;
 }
 
+export interface ModalFieldHint {
+    text: string;
+    tone?: 'ok' | 'error';
+}
+
 export interface ModalField {
     name: string;
     label: string;
@@ -25,7 +30,13 @@ export interface ModalField {
     max?: number;
     step?: number;
     /** Renders a compact "{ }" picker beside a text/url field that inserts `${open}key${close}` at the cursor */
-    tokens?: { list: ModalFieldToken[]; open: string; close: string };
+    tokens?: {
+        list: ModalFieldToken[];
+        open: string;
+        close: string;
+        pasteText?: (key: string, label: string) => string;
+    };
+    hint?: (value: string) => ModalFieldHint | null;
 }
 
 /** A row of fields (rendered side-by-side) or a single field. */
@@ -209,15 +220,102 @@ function mountModal(
     return { close, root: backdrop };
 }
 
-function insertTokenIntoInput(input: HTMLInputElement, key: string, open: string, close: string) {
+const BARE_URL_VALUE = /^\s*(?:[a-z][a-z0-9+.-]*:(?:\/\/)?)?\s*$/i;
+
+function insertTextIntoInput(input: HTMLInputElement, text: string) {
     const value = input.value;
-    const start = input.selectionStart ?? value.length;
-    const end = input.selectionEnd ?? value.length;
-    const tokenText = `${open}${key}${close}`;
-    input.value = value.slice(0, start) + tokenText + value.slice(end);
+    const whole = input.type === 'url' && BARE_URL_VALUE.test(value);
+    const start = whole ? 0 : input.selectionStart ?? value.length;
+    const end = whole ? value.length : input.selectionEnd ?? value.length;
+    input.value = value.slice(0, start) + text + value.slice(end);
     input.focus();
-    const newPos = start + tokenText.length;
+    const newPos = start + text.length;
     input.setSelectionRange(newPos, newPos);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function insertTokenIntoInput(input: HTMLInputElement, key: string, open: string, close: string) {
+    insertTextIntoInput(input, `${open}${key}${close}`);
+}
+
+function squashText(value: string): string {
+    return value.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+const PASTED_CHIP = '.play-editor-token[data-token], .play-editor-token[data-key]';
+
+function pastedChip(e: ClipboardEvent): { key: string; text: string } | null {
+    const html = e.clipboardData?.getData('text/html');
+    if (!html) return null;
+    const holder = document.createElement('template');
+    holder.innerHTML = html;
+    const chips = Array.from(holder.content.querySelectorAll<HTMLElement>(PASTED_CHIP))
+        .filter(el => !el.parentElement?.closest(PASTED_CHIP));
+    if (chips.length !== 1) return null;
+    const chip = chips[0];
+    const key = (chip.getAttribute('data-token') || chip.getAttribute('data-key') || '').trim();
+    const text = squashText(chip.textContent ?? '');
+    chip.remove();
+    if (!key || (holder.content.textContent ?? '').replace(/[\s\u00a0\u200b]/g, '')) return null;
+    return { key, text };
+}
+
+function chipLabel(text: string, open: string, close: string): string {
+    if (text.length > open.length + close.length && text.startsWith(open) && text.endsWith(close)) {
+        return text.slice(open.length, text.length - close.length).trim();
+    }
+    return text;
+}
+
+function attachChipPaste(input: HTMLInputElement, tokens: NonNullable<ModalField['tokens']>) {
+    input.addEventListener('paste', (e) => {
+        const chip = pastedChip(e as ClipboardEvent);
+        if (!chip) return;
+        e.preventDefault();
+        const fallback = `${tokens.open}${chip.key}${tokens.close}`;
+        let text = fallback;
+        if (tokens.pasteText) {
+            try {
+                text = tokens.pasteText(chip.key, chipLabel(chip.text, tokens.open, tokens.close)) || fallback;
+            } catch {
+                text = fallback;
+            }
+        }
+        insertTextIntoInput(input, text);
+    });
+}
+
+let hintCount = 0;
+
+function attachHint(
+    label: HTMLLabelElement,
+    input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+    hintFor: (value: string) => ModalFieldHint | null
+) {
+    const hint = document.createElement('span');
+    hint.className = 'play-editor-modal-hint';
+    hint.id = `play-editor-modal-hint-${++hintCount}`;
+    hint.setAttribute('aria-live', 'polite');
+    input.setAttribute('aria-describedby', hint.id);
+
+    const update = () => {
+        let result: ModalFieldHint | null = null;
+        try {
+            result = hintFor(input.value);
+        } catch {
+            result = null;
+        }
+        hint.textContent = result?.text ?? '';
+        hint.className = result?.tone
+            ? `play-editor-modal-hint play-editor-modal-hint-${result.tone}`
+            : 'play-editor-modal-hint';
+        hint.style.display = result?.text ? '' : 'none';
+    };
+
+    input.addEventListener('input', update);
+    input.addEventListener('change', update);
+    update();
+    label.appendChild(hint);
 }
 
 function buildTokenSelect(input: HTMLInputElement, tokens: NonNullable<ModalField['tokens']>): HTMLSelectElement {
@@ -323,6 +421,9 @@ function renderField(
     } else {
         label.appendChild(input);
     }
+
+    if (field.tokens && input instanceof HTMLInputElement) attachChipPaste(input, field.tokens);
+    if (field.hint) attachHint(label, input, field.hint);
 
     return { wrapper: label, input };
 }

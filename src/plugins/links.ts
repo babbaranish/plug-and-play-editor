@@ -2,8 +2,11 @@ import type { Plugin } from '../core/Plugin';
 import type { Editor } from '../core/Editor';
 import { icons } from '../core/icons';
 import { openFormModal } from '../core/modal';
+import type { ModalFieldHint } from '../core/modal';
 import type { Token } from './tokens';
 import { DEFAULT_EMAIL_TOKENS, DELIMITER_MAP } from './tokens';
+
+export const LINKS_CANONICALIZE_COMMAND = 'links:canonicalize';
 
 export interface LinksPluginOptions {
     /**
@@ -26,6 +29,7 @@ export interface LinksPluginOptions {
      * what is listed is how a legitimate paste gets refused.
      */
     acceptTokens?: Token[] | (() => Token[]);
+    isDestinationToken?: (key: string) => boolean;
     /** Delimiter style — must match how those tokens get replaced elsewhere (default "double-curly") */
     delimiter?: 'double-curly' | 'single-curly' | 'percent';
 }
@@ -136,15 +140,152 @@ const INERT_HREF = '#';
  * picks up non-breaking spaces and stray padding.
  */
 export function resolveTokenReference(input: string, tokens: Token[]): string | null {
-    const norm = (v: string) => v.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
-    const wanted = norm(input);
-    if (!wanted) return null;
-    const byKey = tokens.find((t) => norm(t.key) === wanted);
-    if (byKey) return byKey.key;
-    const byLabel = tokens.filter((t) => norm(t.label) === wanted);
+    const keys = tokenReferenceMatches(input, tokens);
     // Two variables sharing a label cannot be told apart, so guessing would
     // silently point the link at the wrong one.
-    return byLabel.length === 1 ? byLabel[0].key : null;
+    return keys.length === 1 ? keys[0] : null;
+}
+
+function normalizeReference(value: unknown): string {
+    return String(value ?? '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+export function tokenReferenceMatches(input: string, tokens: readonly Token[]): string[] {
+    const wanted = normalizeReference(input);
+    if (!wanted) return [];
+    const exact = tokens.find((t) => t.key === input.trim());
+    if (exact) return [exact.key];
+    const byKey = tokens.find((t) => normalizeReference(t.key) === wanted);
+    if (byKey) return [byKey.key];
+    const keys: string[] = [];
+    tokens.forEach((t) => {
+        if (normalizeReference(t.label) === wanted && !keys.includes(t.key)) keys.push(t.key);
+    });
+    return keys;
+}
+
+export function normalizeTokenHref(value: string): string {
+    return value
+        .replace(/%7B/gi, '{')
+        .replace(/%7D/gi, '}')
+        .replace(/%20/g, ' ')
+        .replace(/%2C/gi, ',')
+        .replace(/%3A/gi, ':')
+        .replace(/\u00a0/g, ' ');
+}
+
+const TOKEN_KEY_SHAPE = /^[A-Za-z0-9_.$:-]+$/;
+
+export function isTokenKeyShaped(value: string): boolean {
+    return TOKEN_KEY_SHAPE.test(value);
+}
+
+export function readTokenSource(source: Token[] | (() => Token[]) | undefined): Token[] {
+    if (!source) return [];
+    try {
+        const list = typeof source === 'function' ? source() : source;
+        return Array.isArray(list) ? list.filter((t) => t && typeof t.key === 'string' && t.key !== '') : [];
+    } catch {
+        // A throwing provider must not take the link dialog down with it.
+        return [];
+    }
+}
+
+export function tokenDisplayText(key: string, tokens: Token[], open: string, close: string, preferredLabel?: string): string {
+    const candidates = [preferredLabel, ...tokens.filter((t) => t.key === key).map((t) => t.label)];
+    for (const candidate of candidates) {
+        const label = typeof candidate === 'string' ? candidate.trim() : '';
+        if (!label || label.includes(open) || label.includes(close)) continue;
+        if (resolveTokenReference(label, tokens) === key) return `${open}${label}${close}`;
+    }
+    return `${open}${key}${close}`;
+}
+
+function tokenName(key: string, tokens: Token[], open: string, close: string, preferredLabel?: string): string {
+    const labels = [preferredLabel, ...tokens.filter((t) => t.key === key).map((t) => t.label)];
+    const named = labels.map((l) => (typeof l === 'string' ? l.trim() : '')).find((l) => l && l !== key);
+    return named || `${open}${key}${close}`;
+}
+
+export interface ExactToken {
+    key: string;
+    display: string;
+    label?: string;
+}
+
+export interface TokenUrlHintOptions {
+    tokens: Token[];
+    open: string;
+    close: string;
+    exact?: ExactToken | null;
+    pickerHasItems: boolean;
+    keepUnknownKeys: boolean;
+}
+
+export function tokenUrlHint(value: string, options: TokenUrlHintOptions): ModalFieldHint | null {
+    const { tokens, open, close, exact } = options;
+    const url = value.trim();
+    const inner = url ? tokenOnlyUrl(url, open, close) : null;
+    if (inner === null) return null;
+    if (exact && url === exact.display) {
+        return { text: `Links to ${tokenName(exact.key, tokens, open, close, exact.label)}`, tone: 'ok' };
+    }
+    const matches = tokenReferenceMatches(inner, tokens);
+    if (matches.length === 1) return { text: `Links to ${tokenName(matches[0], tokens, open, close)}`, tone: 'ok' };
+    const advice = options.pickerHasItems
+        ? 'Pick one from the { } list beside this field.'
+        : 'Copy it exactly as it appears in the email body.';
+    if (matches.length > 1) return { text: `This matches more than one variable. ${advice}`, tone: 'error' };
+    if (options.keepUnknownKeys && isTokenKeyShaped(inner)) {
+        return { text: 'Not in the variable list. It will be used exactly as typed.' };
+    }
+    if (tokens.length === 0) return { text: 'No variables are available here yet.', tone: 'error' };
+    return { text: `Not a known variable. ${advice}`, tone: 'error' };
+}
+
+export function canonicalHrefToken(
+    a: HTMLAnchorElement,
+    tokens: Token[],
+    open: string,
+    close: string,
+    isDestination: (key: string) => boolean
+): string | null {
+    const keys = new Set(tokens.map((t) => t.key));
+    const destination = (key: string) => isTokenKeyShaped(key) && isDestination(key);
+    const stored = a.getAttribute('data-href-token');
+    if (stored !== null && stored.trim()) {
+        if (keys.has(stored) || destination(stored)) return null;
+        const plain = normalizeTokenHref(stored).trim();
+        const inner = tokenOnlyUrl(plain, open, close) ?? plain;
+        if (keys.has(inner) || destination(inner)) return inner;
+        return resolveTokenReference(inner, tokens);
+    }
+    const inner = tokenOnlyUrl(normalizeTokenHref(a.getAttribute('href') ?? ''), open, close);
+    if (inner === null) return null;
+    if (keys.has(inner)) return destination(inner) ? inner : null;
+    return resolveTokenReference(inner, tokens) ?? (destination(inner) ? inner : null);
+}
+
+export function anchorDestinationState(a: HTMLAnchorElement): string {
+    return ['href', 'data-href-token', 'target', 'rel'].map((name) => a.getAttribute(name) ?? '').join('\u0000');
+}
+
+export function mayHoldTokenDestination(a: HTMLAnchorElement, open: string, close: string): boolean {
+    const stored = a.getAttribute('data-href-token');
+    if (stored !== null && stored.trim()) return true;
+    return tokenOnlyUrl(normalizeTokenHref(a.getAttribute('href') ?? ''), open, close) !== null;
+}
+
+export function destinationKeyOf(a: HTMLAnchorElement, tokens: Token[], open: string, close: string): string | null {
+    const stored = a.getAttribute('data-href-token');
+    if (stored !== null && stored.trim()) {
+        if (tokens.some((t) => t.key === stored)) return stored;
+        const plain = normalizeTokenHref(stored).trim();
+        const inner = tokenOnlyUrl(plain, open, close) ?? plain;
+        return resolveTokenReference(inner, tokens) ?? (isTokenKeyShaped(stored) ? stored : null);
+    }
+    const inner = tokenOnlyUrl(normalizeTokenHref(a.getAttribute('href') ?? ''), open, close);
+    return inner === null ? null : resolveTokenReference(inner, tokens);
 }
 
 export function applyLinkAttrsForTest(a: HTMLAnchorElement, url: string, open: string, close: string): void {
@@ -167,29 +308,31 @@ function applyLinkAttrs(a: HTMLAnchorElement, url: string, open: string, close: 
 }
 
 /** The URL to SHOW for a link, so editing one round trips through the dialog. */
-export function displayUrlForTest(a: HTMLAnchorElement, open: string, close: string): string {
-    return displayUrl(a, open, close);
+export function displayUrlForTest(a: HTMLAnchorElement, open: string, close: string, tokens: Token[] = []): string {
+    return displayUrl(a, open, close, tokens);
 }
 
-function displayUrl(a: HTMLAnchorElement, open: string, close: string): string {
+function displayUrl(a: HTMLAnchorElement, open: string, close: string, tokens: Token[] = []): string {
+    const key = destinationKeyOf(a, tokens, open, close);
+    if (key) return tokenDisplayText(key, tokens, open, close);
     const token = a.getAttribute('data-href-token');
     return token ? `${open}${token}${close}` : a.getAttribute('href') || '';
 }
 
 export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
-    const readTokens = (source: Token[] | (() => Token[]) | undefined): Token[] => {
-        if (!source) return [];
+    /** Shown in the picker. */
+    const resolveTokens = (): Token[] => readTokenSource(options?.tokens ?? DEFAULT_EMAIL_TOKENS);
+    /** Accepted when typed or pasted: everything shown, plus the unlisted ones. */
+    const resolveAcceptable = (): Token[] => [...resolveTokens(), ...readTokenSource(options?.acceptTokens)];
+    const isDestination = (key: string): boolean => {
         try {
-            return (typeof source === 'function' ? source() : source) || [];
+            return options?.isDestinationToken
+                ? Boolean(options.isDestinationToken(key))
+                : readTokenSource(options?.acceptTokens).some((t) => t.key === key);
         } catch {
-            // A throwing provider must not take the link dialog down with it.
-            return [];
+            return false;
         }
     };
-    /** Shown in the picker. */
-    const resolveTokens = (): Token[] => readTokens(options?.tokens ?? DEFAULT_EMAIL_TOKENS);
-    /** Accepted when typed or pasted: everything shown, plus the unlisted ones. */
-    const resolveAcceptable = (): Token[] => [...resolveTokens(), ...readTokens(options?.acceptTokens)];
     const [tokenOpen, tokenClose] = DELIMITER_MAP[options?.delimiter || 'double-curly'];
 
     return {
@@ -197,6 +340,7 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
         init(editor: Editor) {
             let bubble: HTMLDivElement | null = null;
             let urlLabel: HTMLSpanElement | null = null;
+            let urlNote: HTMLSpanElement | null = null;
             let activeAnchor: HTMLAnchorElement | null = null;
             let hideTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -212,18 +356,34 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                 // asynchronously, or depends on the current document, would
                 // otherwise get an empty picker with no sign anything is wrong.
                 const tokens = resolveTokens();
+                const known = resolveAcceptable();
                 const tokenPicker = { list: tokens, open: tokenOpen, close: tokenClose };
                 const selectedText = savedRange ? savedRange.toString() : '';
                 const editable = anchor ? isPlainTextAnchor(anchor) : true;
                 const currentText = anchor ? anchor.textContent ?? '' : selectedText;
+                const originalKey = anchor ? destinationKeyOf(anchor, known, tokenOpen, tokenClose) : null;
+                const original: ExactToken | null = originalKey
+                    ? { key: originalKey, display: tokenDisplayText(originalKey, known, tokenOpen, tokenClose) }
+                    : null;
 
                 const urlField = {
                     name: 'url',
                     label: 'Link URL',
                     type: 'url' as const,
-                    value: anchor ? displayUrl(anchor, tokenOpen, tokenClose) : 'https://',
+                    value: anchor ? displayUrl(anchor, tokenOpen, tokenClose, known) : 'https://',
                     placeholder: `https://example.com  or  ${tokenOpen}unsubscribe_url${tokenClose}`,
-                    tokens: tokenPicker
+                    tokens: {
+                        ...tokenPicker,
+                        pasteText: (key: string, label: string) => tokenDisplayText(key, known, tokenOpen, tokenClose, label)
+                    },
+                    hint: (value: string) => tokenUrlHint(value, {
+                        tokens: known,
+                        open: tokenOpen,
+                        close: tokenClose,
+                        exact: original,
+                        pickerHasItems: tokens.length > 0,
+                        keepUnknownKeys: false
+                    })
                 };
 
                 const fields = editable
@@ -265,7 +425,9 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                         // that matches neither is refused rather than stored as a
                         // destination nothing can ever resolve.
                         const chosen = tokenOnlyUrl(url, tokenOpen, tokenClose);
-                        if (chosen) {
+                        if (chosen && original && url === original.display) {
+                            url = `${tokenOpen}${original.key}${tokenClose}`;
+                        } else if (chosen) {
                             const acceptable = resolveAcceptable();
                             const match = resolveTokenReference(chosen, acceptable);
                             if (!match) {
@@ -404,6 +566,11 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                 urlLabel.className = 'play-editor-link-bubble-url';
                 bubble.appendChild(urlLabel);
 
+                urlNote = document.createElement('span');
+                urlNote.className = 'play-editor-link-bubble-note';
+                urlNote.style.display = 'none';
+                bubble.appendChild(urlNote);
+
                 const action = (icon: string, label: string, onClick: () => void) => {
                     const b = document.createElement('button');
                     b.type = 'button';
@@ -449,14 +616,41 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                 return bubble;
             }
 
+            function destinationView(a: HTMLAnchorElement): { text: string; title: string; state: 'url' | 'token' | 'unknown' } {
+                const known = resolveAcceptable();
+                const key = destinationKeyOf(a, known, tokenOpen, tokenClose);
+                if (key) {
+                    return {
+                        text: tokenDisplayText(key, known, tokenOpen, tokenClose),
+                        title: `${tokenOpen}${key}${tokenClose}`,
+                        state: 'token'
+                    };
+                }
+                const stored = a.getAttribute('data-href-token');
+                const hasStored = stored !== null && stored.trim() !== '';
+                const raw = hasStored ? stored : a.getAttribute('href') || '';
+                const plain = normalizeTokenHref(raw).trim();
+                const inner = tokenOnlyUrl(plain, tokenOpen, tokenClose) ?? (hasStored ? plain : null);
+                if (inner === null) return { text: raw, title: raw, state: 'url' };
+                return {
+                    text: `${tokenOpen}${inner}${tokenClose}`,
+                    title: raw,
+                    state: isTokenKeyShaped(inner) ? 'token' : 'unknown'
+                };
+            }
+
             function showBubble(a: HTMLAnchorElement) {
                 cancelHide();
                 const el = ensureBubble();
                 activeAnchor = a;
 
-                const shown = displayUrl(a, tokenOpen, tokenClose);
-                urlLabel!.textContent = shown;
-                urlLabel!.title = shown;
+                const view = destinationView(a);
+                urlLabel!.textContent = view.text;
+                urlLabel!.title = view.title;
+                urlLabel!.classList.toggle('play-editor-link-bubble-url-token', view.state === 'token');
+                urlLabel!.classList.toggle('play-editor-link-bubble-url-error', view.state === 'unknown');
+                urlNote!.textContent = view.state === 'unknown' ? 'Not a known variable' : '';
+                urlNote!.style.display = view.state === 'unknown' ? '' : 'none';
 
                 editor.container.style.position = 'relative';
                 editor.container.appendChild(el);
@@ -564,10 +758,42 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                 editor.execCommand('unlink');
             });
 
+            let destroyed = false;
+
+            function canonicalize(): boolean {
+                if (destroyed || editor.hasActiveContentSource()) return false;
+                if (editor.container.classList.contains('play-editor-preview-mode')) return false;
+                const anchors = Array.from(editor.editorArea.querySelectorAll<HTMLAnchorElement>('a')).filter(
+                    (a) => !a.closest('.play-editor-button-block') && mayHoldTokenDestination(a, tokenOpen, tokenClose)
+                );
+                if (anchors.length === 0) return false;
+                const known = resolveAcceptable();
+                let changed = false;
+                anchors.forEach((a) => {
+                    const key = canonicalHrefToken(a, known, tokenOpen, tokenClose, isDestination);
+                    if (!key) return;
+                    const before = anchorDestinationState(a);
+                    applyLinkAttrs(a, `${tokenOpen}${key}${tokenClose}`, tokenOpen, tokenClose);
+                    if (anchorDestinationState(a) !== before) changed = true;
+                });
+                if (changed) editor.notifyContentChange();
+                return changed;
+            }
+
+            const unregisterCanonicalize = editor.registerCommand(LINKS_CANONICALIZE_COMMAND, () => canonicalize());
+            const unsubscribeInput = editor.onInput(() => {
+                canonicalize();
+            });
+            canonicalize();
+
             editor.onDestroy(() => {
+                destroyed = true;
+                unregisterCanonicalize();
+                unsubscribeInput();
                 hideBubble();
                 bubble = null;
                 urlLabel = null;
+                urlNote = null;
                 editor.editorArea.removeEventListener('mouseover', onMouseOver);
                 editor.editorArea.removeEventListener('mouseleave', onMouseLeave);
                 editor.editorArea.removeEventListener('dblclick', onDblClick);

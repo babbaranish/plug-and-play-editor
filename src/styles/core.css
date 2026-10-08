@@ -1380,6 +1380,21 @@ select.play-editor-modal-input {
     background: var(--pe-btn-hover);
 }
 
+.play-editor-modal-hint {
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--pe-text-muted);
+    overflow-wrap: anywhere;
+}
+
+.play-editor-modal-hint-ok {
+    color: #047857;
+}
+
+.play-editor-modal-hint-error {
+    color: #b91c1c;
+}
+
 .play-editor-modal-error {
     margin: 0 16px 4px;
     padding: 8px 10px;
@@ -1500,6 +1515,27 @@ select.play-editor-modal-input {
     color: var(--pe-text-muted);
     direction: ltr;
     unicode-bidi: plaintext;
+}
+
+.play-editor-link-bubble-url-token {
+    flex: 0 1 auto;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: #fef3c7;
+    color: #92400e;
+    font-weight: 500;
+}
+
+.play-editor-link-bubble-url-error {
+    color: #b91c1c;
+}
+
+.play-editor-link-bubble-note {
+    flex: 0 0 auto;
+    padding: 0 4px;
+    font-size: 11px;
+    color: #b91c1c;
+    white-space: nowrap;
 }
 
 .play-editor-link-bubble-btn {
