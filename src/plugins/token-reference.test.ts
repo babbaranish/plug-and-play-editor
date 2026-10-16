@@ -187,7 +187,8 @@ describe('canonicalHrefToken', () => {
     });
 
     it('leaves canonical and unresolvable values alone', () => {
-        expect(plan(`<a href="#" data-href-token="${FEE}">x</a>`)).toBeNull();
+        expect(plan(`<a href="{{${FEE}}}" data-href-token="${FEE}">x</a>`)).toBeNull();
+        expect(plan('<a href="#" data-href-token="login_url">x</a>')).toBeNull();
         expect(plan('<a href="{{login_url}}">x</a>')).toBeNull();
         expect(plan('<a href="{{Hostel Fee}}">x</a>')).toBeNull();
         expect(plan('<a href="https://x.test">x</a>')).toBeNull();
@@ -195,6 +196,8 @@ describe('canonicalHrefToken', () => {
 
     it('moves exact destination keys, listed or not', () => {
         expect(plan(`<a href="{{${FEE}}}">x</a>`)).toBe(FEE);
+        expect(plan(`<a href="#" data-href-token="${FEE}">x</a>`)).toBe(FEE);
+        expect(plan('<a href="#" data-href-token="Fee:abc:link-2:PaymentLink">x</a>')).toBe('Fee:abc:link-2:PaymentLink');
         expect(plan('<a href="{{Fee:abc:link-2:PaymentLink}}">x</a>')).toBe('Fee:abc:link-2:PaymentLink');
     });
 });

@@ -157,7 +157,7 @@ describe('links canonicalize', () => {
         );
         const a = anchor(ed, 'cta');
         expect(a.getAttribute('data-href-token')).toBe(FEE);
-        expect(a.getAttribute('href')).toBe('#');
+        expect(a.getAttribute('href')).toBe(`{{${FEE}}}`);
         expect(a.getAttribute('target')).toBe('_blank');
         expect(a.getAttribute('rel')).toBe('noopener noreferrer');
         expect(a.getAttribute('style')).toContain('background');
@@ -195,10 +195,30 @@ describe('links canonicalize', () => {
         expect(anchor(ed, 'login').getAttribute('href')).toBe('{{login_url}}');
     });
 
-    it('moves an exact destination key into data-href-token', () => {
+    it('keeps an exact destination key in href and copies it into data-href-token', () => {
         const ed = mountWith(`<p><a id="a" href="{{${FEE}}}">Pay</a></p>`, [links()]);
         expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe(FEE);
+        expect(anchor(ed, 'a').getAttribute('href')).toBe(`{{${FEE}}}`);
+    });
+
+    it('puts a destination held only in data-href-token back into href', () => {
+        const ed = mountWith(`<p><a id="a" href="#" data-href-token="${FEE}">Pay</a></p>`, [links()]);
+        expect(anchor(ed, 'a').getAttribute('href')).toBe(`{{${FEE}}}`);
+        expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe(FEE);
+    });
+
+    it('restores the href of a destination after a copy made it absolute and encoded', () => {
+        const ed = mountWith(
+            `<p><a id="a" href="https://admin.example/admin/email-builder-v2/%7B%7B${FEE}%7D%7D" data-href-token="${FEE}">Pay</a></p>`,
+            [links()]
+        );
+        expect(anchor(ed, 'a').getAttribute('href')).toBe(`{{${FEE}}}`);
+    });
+
+    it('leaves a non destination key held in data-href-token as it is', () => {
+        const ed = mountWith('<p><a id="a" href="#" data-href-token="login_url">log in</a></p>', [links()]);
         expect(anchor(ed, 'a').getAttribute('href')).toBe('#');
+        expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe('login_url');
     });
 
     it('treats acceptTokens as the destinations when isDestinationToken is not given', () => {
@@ -222,10 +242,10 @@ describe('links canonicalize', () => {
         expect(anchor(ed, 'a').getAttribute('href')).toBe('{{login_url}}');
     });
 
-    it('stores a payment link label in data-href-token', () => {
+    it('stores a payment link label as its key, in href and in data-href-token', () => {
         const ed = mountWith(`<p><a id="a" href="{{${LABEL}}}">Pay</a></p>`, [links()]);
         expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe(FEE);
-        expect(anchor(ed, 'a').getAttribute('href')).toBe('#');
+        expect(anchor(ed, 'a').getAttribute('href')).toBe(`{{${FEE}}}`);
     });
 
     it('leaves anchors inside button blocks to the button plugin', () => {
@@ -276,7 +296,7 @@ describe('closing a source view', () => {
         expect(anchor(ed, 'btn').getAttribute('data-href-token')).toBe(FEE);
         expect(anchor(ed, 'btn').getAttribute('href')).toBe('#');
         expect(anchor(ed, 'plain').getAttribute('data-href-token')).toBe(FEE);
-        expect(anchor(ed, 'plain').getAttribute('href')).toBe('#');
+        expect(anchor(ed, 'plain').getAttribute('href')).toBe(`{{${FEE}}}`);
         expect(ed.textArea.value).toContain(`data-href-token="${FEE}"`);
     });
 
@@ -298,7 +318,7 @@ describe('closing a source view', () => {
         await frame();
         await frame();
         expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe(FEE);
-        expect(anchor(ed, 'a').getAttribute('href')).toBe('#');
+        expect(anchor(ed, 'a').getAttribute('href')).toBe(`{{${FEE}}}`);
         expect(ed.textArea.value).toContain(`data-href-token="${FEE}"`);
         expect(reported[reported.length - 1]).toContain(`data-href-token="${FEE}"`);
     });
@@ -321,7 +341,7 @@ describe('closing a source view', () => {
     });
 
     it('reports nothing when closing a view leaves nothing to tidy', async () => {
-        const ed = mountWith(`<p><a id="a" href="#" data-href-token="${FEE}">Pay</a></p>`, [links(), SourceCodePlugin]);
+        const ed = mountWith(`<p><a id="a" href="{{${FEE}}}" data-href-token="${FEE}">Pay</a></p>`, [links(), SourceCodePlugin]);
         const onInput = vi.fn();
         ed.editorArea.addEventListener('input', onInput);
         toolbarButton(ed, 'Source Code').click();
@@ -429,6 +449,95 @@ describe('Edit Link', () => {
         expect(url.value).toBe(`{{${LABEL}}}`);
         submit(ed);
         expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe(FEE);
+        expect(anchor(ed, 'a').getAttribute('href')).toBe(`{{${FEE}}}`);
+    });
+
+    const pasteChip = (url: HTMLInputElement, html: string, text = `{{${LABEL}}}`) => {
+        const data = new DataTransfer();
+        data.setData('text/html', html);
+        data.setData('text/plain', text);
+        const event = new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true });
+        url.dispatchEvent(event);
+        return event;
+    };
+    const feeChip = `<span class="play-editor-token" data-token="${FEE}" data-key="${FEE}">{{${LABEL}}}</span>`;
+
+    it('replaces the whole URL when a payment link chip is pasted with the caret at the end', () => {
+        for (const href of ['https://x.test/pay', '#']) {
+            const ed = mountWith(`<p><a id="a" href="${href}">Pay</a></p>`, [links()]);
+            openEdit(ed, 'a');
+            const url = field(ed, 'url')!;
+            url.focus();
+            url.setSelectionRange(url.value.length, url.value.length);
+            expect(pasteChip(url, feeChip).defaultPrevented).toBe(true);
+            expect(url.value).toBe(`{{${LABEL}}}`);
+            expect(hint(ed)!.textContent).toBe(`Links to ${LABEL}`);
+            submit(ed);
+            expect(errorText(ed)).toBe('');
+            expect(anchor(ed, 'a').getAttribute('href')).toBe(`{{${FEE}}}`);
+            expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe(FEE);
+            editor?.destroy();
+            editor = null;
+            document.body.innerHTML = '';
+        }
+    });
+
+    it('takes a payment link chip copied together with the characters around it', () => {
+        const ed = mountWith('<p><a id="a" href="https://x.test/pay">Pay</a></p>', [links()]);
+        openEdit(ed, 'a');
+        const url = field(ed, 'url')!;
+        url.select();
+        expect(pasteChip(url, `<span>link:</span>${feeChip}<span>&nbsp;now</span>`, `link:{{${LABEL}}} now`).defaultPrevented).toBe(true);
+        expect(url.value).toBe(`{{${LABEL}}}`);
+        submit(ed);
+        expect(anchor(ed, 'a').getAttribute('href')).toBe(`{{${FEE}}}`);
+    });
+
+    it('leaves a chip copied inside a sentence to the browser when it is not a destination', () => {
+        const ed = mountWith('<p><a id="a" href="https://x.test/pay">Pay</a></p>', [links()]);
+        openEdit(ed, 'a');
+        const url = field(ed, 'url')!;
+        url.select();
+        const event = pasteChip(url, 'Sign in at <span class="play-editor-token" data-token="login_url" data-key="login_url">{{Login Link}}</span>', 'Sign in at {{Login Link}}');
+        expect(event.defaultPrevented).toBe(false);
+        expect(url.value).toBe('https://x.test/pay');
+    });
+
+    it('replaces a # placeholder when any chip is pasted', () => {
+        const ed = mountWith('<p><a id="a" href="#">log in</a></p>', [links()]);
+        openEdit(ed, 'a');
+        const url = field(ed, 'url')!;
+        url.focus();
+        url.setSelectionRange(url.value.length, url.value.length);
+        pasteChip(url, '<span class="play-editor-token" data-token="login_url" data-key="login_url">{{Login Link}}</span>', '{{Login Link}}');
+        expect(url.value).toBe('{{Login Link}}');
+    });
+
+    it('replaces the whole URL when a payment link is picked from the list', () => {
+        const ed = mountWith('<p><a id="a" href="https://x.test/pay">Pay</a></p>', [links({ tokens: [...MERGE, ...FEES], acceptTokens: FEES, isDestinationToken: isPaymentLink })]);
+        openEdit(ed, 'a');
+        const url = field(ed, 'url')!;
+        url.focus();
+        url.setSelectionRange(url.value.length, url.value.length);
+        const select = modal(ed)!.querySelectorAll<HTMLSelectElement>('.play-editor-modal-token-select')[1];
+        select.value = FEE;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        expect(url.value).toBe(`{{${FEE}}}`);
+        submit(ed);
+        expect(anchor(ed, 'a').getAttribute('href')).toBe(`{{${FEE}}}`);
+        expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe(FEE);
+    });
+
+    it('still inserts a non destination picked from the list at the caret', () => {
+        const ed = mountWith('<p><a id="a" href="https://go.example/?to=">Go</a></p>', [links()]);
+        openEdit(ed, 'a');
+        const url = field(ed, 'url')!;
+        url.focus();
+        url.setSelectionRange(url.value.length, url.value.length);
+        const select = modal(ed)!.querySelectorAll<HTMLSelectElement>('.play-editor-modal-token-select')[1];
+        select.value = 'login_url';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        expect(url.value).toBe('https://go.example/?to={{login_url}}');
     });
 
     it('turns a chip pasted inside an address into its key', () => {
@@ -512,10 +621,28 @@ describe('Link URL with a variable inside an address', () => {
     it('writes every variable that resolves as its key, and keeps unknown keys as typed', () => {
         const ed = mountWith('<p><a id="a" href="https://x.test">Pay</a></p>', [links()]);
         openEdit(ed, 'a');
-        setUrl(ed, `https://go.example/?to={{LOGIN_URL}}&fee={{${LABEL}}}&id={{applicant_id}}`);
+        setUrl(ed, 'https://go.example/?to={{LOGIN_URL}}&pdf={{Offer letter PDF}}&id={{applicant_id}}');
         submit(ed);
         expect(errorText(ed)).toBe('');
-        expect(anchor(ed, 'a').getAttribute('href')).toBe(`https://go.example/?to={{login_url}}&fee={{${FEE}}}&id={{applicant_id}}`);
+        expect(anchor(ed, 'a').getAttribute('href')).toBe('https://go.example/?to={{login_url}}&pdf={{token:dynamic_offer_pdf_hros}}&id={{applicant_id}}');
+    });
+
+    it('refuses a payment link inside an address, by label or by key, and warns in the hint', () => {
+        const message = `"${LABEL}" has to be the whole Link URL, with nothing before or after it. Clear the field, then paste or pick it again.`;
+        for (const url of [`https://x.test/pay{{${FEE}}}`, `#{{${LABEL}}}`, `:{{${LABEL}}}`, `https://go.example/?to={{${LABEL}}}`]) {
+            const ed = mountWith('<p><a id="a" href="https://x.test/pay">Pay</a></p>', [links()]);
+            openEdit(ed, 'a');
+            setUrl(ed, url);
+            expect(hint(ed)!.textContent).toBe(message);
+            expect(hint(ed)!.className).toContain('play-editor-modal-hint-error');
+            submit(ed);
+            expect(errorText(ed)).toBe(message);
+            expect(anchor(ed, 'a').getAttribute('href')).toBe('https://x.test/pay');
+            expect(anchor(ed, 'a').hasAttribute('data-href-token')).toBe(false);
+            editor?.destroy();
+            editor = null;
+            document.body.innerHTML = '';
+        }
     });
 
     it('refuses a label inside an address that resolves to nothing, names it and warns in the hint', () => {
@@ -547,6 +674,26 @@ describe('Link URL with a variable inside an address', () => {
     });
 });
 
+describe('clicking a link', () => {
+    const click = (ed: Editor, id: string) => {
+        const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+        anchor(ed, id).dispatchEvent(event);
+        return event.defaultPrevented;
+    };
+
+    it('never follows a link whose destination is a variable', () => {
+        const ed = mountWith(
+            `<p><a id="fee" href="{{${FEE}}}" data-href-token="${FEE}">Pay</a> <a id="old" href="#" data-href-token="${FEE}">Pay</a> ` +
+            '<a id="raw" href="{{login_url}}">log in</a> <a id="site" href="https://x.test">site</a></p>',
+            [links()]
+        );
+        expect(click(ed, 'fee')).toBe(true);
+        expect(click(ed, 'old')).toBe(true);
+        expect(click(ed, 'raw')).toBe(true);
+        expect(click(ed, 'site')).toBe(false);
+    });
+});
+
 describe('tidying when the plugin starts', () => {
     it('reports a button it tidied to a listener attached after construction', async () => {
         const ed = mountWith(`${block(`{{${LABEL}}}`)}<p>x</p>`, [buttons()]);
@@ -573,7 +720,7 @@ describe('tidying when the plugin starts', () => {
     });
 
     it('reports nothing later when there was nothing to tidy', async () => {
-        const ed = mountWith(`${block('#', ` data-href-token="${FEE}"`)}<p><a id="a" href="#" data-href-token="${FEE}">Pay</a></p>`, [links(), buttons()]);
+        const ed = mountWith(`${block('#', ` data-href-token="${FEE}"`)}<p><a id="a" href="{{${FEE}}}" data-href-token="${FEE}">Pay</a></p>`, [links(), buttons()]);
         const onInput = vi.fn();
         ed.editorArea.addEventListener('input', onInput);
         await frame();

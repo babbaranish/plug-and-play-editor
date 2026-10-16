@@ -35,6 +35,7 @@ export interface ModalField {
         open: string;
         close: string;
         pasteText?: (key: string, label: string) => string;
+        wholeValue?: (key: string) => boolean;
     };
     hint?: (value: string) => ModalFieldHint | null;
 }
@@ -220,7 +221,7 @@ function mountModal(
     return { close, root: backdrop };
 }
 
-const BARE_URL_VALUE = /^\s*(?:[a-z][a-z0-9+.-]*:(?:\/\/)?)?\s*$/i;
+const BARE_URL_VALUE = /^\s*(?:#|[a-z][a-z0-9+.-]*:(?:\/\/)?)?\s*$/i;
 
 function replacedSpan(input: HTMLInputElement): [number, number] {
     const value = input.value;
@@ -233,9 +234,17 @@ function replacesWholeValue(input: HTMLInputElement): boolean {
     return !(input.value.slice(0, start) + input.value.slice(end)).trim();
 }
 
-function insertTextIntoInput(input: HTMLInputElement, text: string) {
+function wantsWholeValue(tokens: NonNullable<ModalField['tokens']>, key: string): boolean {
+    try {
+        return Boolean(tokens.wholeValue?.(key));
+    } catch {
+        return false;
+    }
+}
+
+function insertTextIntoInput(input: HTMLInputElement, text: string, wholeValue = false) {
     const value = input.value;
-    const [start, end] = replacedSpan(input);
+    const [start, end] = wholeValue ? [0, value.length] : replacedSpan(input);
     input.value = value.slice(0, start) + text + value.slice(end);
     input.focus();
     const newPos = start + text.length;
@@ -243,8 +252,8 @@ function insertTextIntoInput(input: HTMLInputElement, text: string) {
     input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-function insertTokenIntoInput(input: HTMLInputElement, key: string, open: string, close: string) {
-    insertTextIntoInput(input, `${open}${key}${close}`);
+function insertTokenIntoInput(input: HTMLInputElement, key: string, open: string, close: string, wholeValue = false) {
+    insertTextIntoInput(input, `${open}${key}${close}`, wholeValue);
 }
 
 function squashText(value: string): string {
@@ -253,7 +262,7 @@ function squashText(value: string): string {
 
 const PASTED_CHIP = '.play-editor-token[data-token], .play-editor-token[data-key]';
 
-function pastedChip(e: ClipboardEvent): { key: string; text: string } | null {
+function pastedChip(e: ClipboardEvent): { key: string; text: string; alone: boolean } | null {
     const html = e.clipboardData?.getData('text/html');
     if (!html) return null;
     const holder = document.createElement('template');
@@ -265,8 +274,8 @@ function pastedChip(e: ClipboardEvent): { key: string; text: string } | null {
     const key = (chip.getAttribute('data-token') || chip.getAttribute('data-key') || '').trim();
     const text = squashText(chip.textContent ?? '');
     chip.remove();
-    if (!key || (holder.content.textContent ?? '').replace(/[\s\u00a0\u200b]/g, '')) return null;
-    return { key, text };
+    if (!key) return null;
+    return { key, text, alone: !(holder.content.textContent ?? '').replace(/[\s\u00a0\u200b]/g, '') };
 }
 
 function chipLabel(text: string, open: string, close: string): string {
@@ -280,17 +289,19 @@ function attachChipPaste(input: HTMLInputElement, tokens: NonNullable<ModalField
     input.addEventListener('paste', (e) => {
         const chip = pastedChip(e as ClipboardEvent);
         if (!chip) return;
+        const whole = wantsWholeValue(tokens, chip.key);
+        if (!chip.alone && !whole) return;
         e.preventDefault();
         const fallback = `${tokens.open}${chip.key}${tokens.close}`;
         let text = fallback;
-        if (tokens.pasteText && replacesWholeValue(input)) {
+        if (tokens.pasteText && (whole || replacesWholeValue(input))) {
             try {
                 text = tokens.pasteText(chip.key, chipLabel(chip.text, tokens.open, tokens.close)) || fallback;
             } catch {
                 text = fallback;
             }
         }
-        insertTextIntoInput(input, text);
+        insertTextIntoInput(input, text, whole);
     });
 }
 
@@ -363,7 +374,7 @@ function buildTokenSelect(input: HTMLInputElement, tokens: NonNullable<ModalFiel
 
     select.addEventListener('change', () => {
         if (!select.value) return;
-        insertTokenIntoInput(input, select.value, open, close);
+        insertTokenIntoInput(input, select.value, open, close, wantsWholeValue(tokens, select.value));
         select.value = '';
     });
 

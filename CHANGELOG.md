@@ -5,6 +5,31 @@ format follows [Keep a Changelog](https://keepachangelog.com/), and the
 project adheres to [Semantic Versioning](https://semver.org/) while
 pre-1.0 (minor versions may contain breaking changes).
 
+## [0.11.1] - 2026-10-16
+
+### Fixed
+
+- **A link to a payment link carries it in `href`.** Edit Link, Insert Link
+  and the links tidy up now write a destination (`isDestinationToken`) as
+  `href="{{key}}"` and keep the key in `data-href-token` too, where they used
+  to leave `href="#"`. The attribute is what restores the href after a copy
+  rewrites it into an absolute, percent encoded address. Links saved by
+  earlier versions with `href="#"` are upgraded when the editor loads them.
+  Other variables keep their old form, and buttons are unchanged.
+- **Pasting a payment link replaced nothing.** With the caret at the end of the
+  Link URL field, a pasted chip was appended to the old address
+  (`https://x.test/pay{{key}}`, saved silently) or, after `#`, refused as an
+  invalid URL. A chip or `{ }` choice that is a destination now replaces the
+  whole field, a chip copied together with the characters around it is still
+  taken, and `#` counts as an empty URL for any variable. Available to any
+  form as `ModalField.tokens.wholeValue(key)`.
+- **A payment link inside a longer address is refused.** Edit Link and Insert
+  Link say the variable has to be the whole Link URL, and the hint warns as
+  you type, instead of saving an address that cannot work.
+- **Clicking a link whose destination is a variable does nothing**, in the
+  editor and in Preview Mode, instead of opening an address that does not
+  exist.
+
 ## [0.11.0] - 2026-10-08
 
 ### Added

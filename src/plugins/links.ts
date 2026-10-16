@@ -113,10 +113,10 @@ function unwrapAnchor(a: HTMLAnchorElement): void {
  * Is this URL nothing but a variable, e.g. `{{payment_link}}`?
  *
  * Such a link has no address yet: whatever consumes the document supplies one
- * per recipient. Storing the variable in `href` is what breaks that, because an
- * href is text — a URL field percent-encodes it, and nothing downstream can
- * tell it from an ordinary address. Held in `data-href-token` instead, it stays
- * intact through the DOM round trip and `href` keeps an inert placeholder.
+ * per recipient. An href alone is fragile, because copying a link rewrites it
+ * into an absolute, percent-encoded address nothing downstream can tell from an
+ * ordinary one. `data-href-token` keeps the variable intact through that, and
+ * restores the href of a destination.
  */
 export function tokenOnlyUrl(url: string, open: string, close: string): string | null {
     const trimmed = url.trim();
@@ -262,6 +262,7 @@ export interface TokenUrlHintOptions {
     exact?: ExactToken | null;
     pickerHasItems: boolean;
     keepUnknownKeys: boolean;
+    isDestination?: (key: string) => boolean;
 }
 
 export function tokenUrlHint(value: string, options: TokenUrlHintOptions): ModalFieldHint | null {
@@ -273,7 +274,14 @@ export function tokenUrlHint(value: string, options: TokenUrlHintOptions): Modal
         : 'Copy it exactly as it appears in the email body.';
     const inner = tokenOnlyUrl(url, open, close);
     if (inner === null) {
-        const unknown = resolveEmbeddedTokens(url, tokens, open, close, exact).unknown;
+        const embedded = resolveEmbeddedTokens(url, tokens, open, close, exact);
+        const destination = options.isDestination
+            ? embeddedDestinationKey(embedded.url, open, close, options.isDestination)
+            : null;
+        if (destination) {
+            return { text: wholeUrlMessage(tokenName(destination, tokens, open, close, exact?.key === destination ? exact.label : undefined)), tone: 'error' };
+        }
+        const unknown = embedded.unknown;
         if (!unknown) return null;
         if (unknown.ambiguous) return { text: `"${unknown.name}" matches more than one variable. ${advice}`, tone: 'error' };
         const fix = tokens.length === 0 ? 'No variables are available here yet.' : advice;
@@ -303,7 +311,8 @@ export function canonicalHrefToken(
     const destination = (key: string) => isTokenKeyShaped(key) && isDestination(key);
     const stored = a.getAttribute('data-href-token');
     if (stored !== null && stored.trim()) {
-        if (keys.has(stored) || destination(stored)) return null;
+        if (destination(stored)) return a.getAttribute('href') === `${open}${stored}${close}` ? null : stored;
+        if (keys.has(stored)) return null;
         const plain = normalizeTokenHref(stored).trim();
         const inner = tokenOnlyUrl(plain, open, close) ?? plain;
         if (keys.has(inner) || destination(inner)) return inner;
@@ -337,15 +346,49 @@ export function destinationKeyOf(a: HTMLAnchorElement, tokens: Token[], open: st
     return inner === null ? null : resolveTokenReference(inner, tokens);
 }
 
-export function applyLinkAttrsForTest(a: HTMLAnchorElement, url: string, open: string, close: string): void {
-    applyLinkAttrs(a, url, open, close);
+export function applyLinkAttrsForTest(
+    a: HTMLAnchorElement,
+    url: string,
+    open: string,
+    close: string,
+    isDestination: (key: string) => boolean = () => false
+): void {
+    applyLinkAttrs(a, url, open, close, isDestination);
 }
 
-function applyLinkAttrs(a: HTMLAnchorElement, url: string, open: string, close: string): void {
+export function embeddedDestinationKey(
+    url: string,
+    open: string,
+    close: string,
+    isDestination: (key: string) => boolean
+): string | null {
+    if (tokenOnlyUrl(url, open, close) !== null) return null;
+    let at = url.indexOf(open);
+    while (at !== -1) {
+        const end = url.indexOf(close, at + open.length);
+        if (end === -1) return null;
+        const key = url.slice(at + open.length, end).trim();
+        if (key && isDestination(key)) return key;
+        at = url.indexOf(open, end + close.length);
+    }
+    return null;
+}
+
+function wholeUrlMessage(name: string): string {
+    return `"${name}" has to be the whole Link URL, with nothing before or after it. Clear the field, then paste or pick it again.`;
+}
+
+function applyLinkAttrs(
+    a: HTMLAnchorElement,
+    url: string,
+    open: string,
+    close: string,
+    isDestination: (key: string) => boolean
+): void {
     const token = tokenOnlyUrl(url, open, close);
     if (token) {
         a.setAttribute('data-href-token', token);
-        a.setAttribute('href', INERT_HREF);
+        a.setAttribute('href', isDestination(token) ? `${open}${token}${close}` : INERT_HREF);
     } else {
         // Re-pointing a token link at a real address must clear the token, or
         // the stale one wins wherever the document is resolved.
@@ -432,7 +475,8 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                     placeholder: `https://example.com  or  ${tokenOpen}unsubscribe_url${tokenClose}`,
                     tokens: {
                         ...tokenPicker,
-                        pasteText: (key: string, label: string) => tokenDisplayText(key, known, tokenOpen, tokenClose, label)
+                        pasteText: (key: string, label: string) => tokenDisplayText(key, known, tokenOpen, tokenClose, label),
+                        wholeValue: isDestination
                     },
                     hint: (value: string) => tokenUrlHint(value, {
                         tokens: known,
@@ -440,7 +484,8 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                         close: tokenClose,
                         exact: original,
                         pickerHasItems: tokens.length > 0,
-                        keepUnknownKeys: false
+                        keepUnknownKeys: false,
+                        isDestination
                     })
                 };
 
@@ -466,6 +511,16 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                         let url = values.url.trim();
                         if (!url) {
                             showError('URL is required.');
+                            return;
+                        }
+                        const glued = embeddedDestinationKey(
+                            resolveEmbeddedTokens(url, resolveAcceptable(), tokenOpen, tokenClose, original).url,
+                            tokenOpen,
+                            tokenClose,
+                            isDestination
+                        );
+                        if (glued) {
+                            showError(wholeUrlMessage(tokenName(glued, known, tokenOpen, tokenClose)));
                             return;
                         }
                         if (!isValidLinkUrl(url, tokenOpen, tokenClose)) {
@@ -518,7 +573,7 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                         }
 
                         if (anchor) {
-                            applyLinkAttrs(anchor, url, tokenOpen, tokenClose);
+                            applyLinkAttrs(anchor, url, tokenOpen, tokenClose, isDestination);
                             if (editable && text !== currentText) anchor.textContent = text;
                         } else {
                             insertNewLink(url, text, selectedText, savedRange);
@@ -574,7 +629,7 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                     editor.editorArea.querySelectorAll('a').forEach(a => {
                         const had = priorHref.has(a);
                         if (had && priorHref.get(a) === a.getAttribute('href')) return;
-                        applyLinkAttrs(a as HTMLAnchorElement, url, tokenOpen, tokenClose);
+                        applyLinkAttrs(a as HTMLAnchorElement, url, tokenOpen, tokenClose, isDestination);
                         if (!had) keepTextColor(a as HTMLAnchorElement);
                     });
                     return;
@@ -582,7 +637,7 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
 
                 const a = document.createElement('a');
                 a.textContent = text;
-                applyLinkAttrs(a, url, tokenOpen, tokenClose);
+                applyLinkAttrs(a, url, tokenOpen, tokenClose, isDestination);
 
                 const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
                 if (range) {
@@ -775,6 +830,13 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
 
             const onScroll = () => hideBubble();
 
+            const onClick = (e: MouseEvent) => {
+                const el = e.target as HTMLElement | null;
+                const a = el && typeof el.closest === 'function' ? (el.closest('a') as HTMLAnchorElement | null) : null;
+                if (a && editor.editorArea.contains(a) && mayHoldTokenDestination(a, tokenOpen, tokenClose)) e.preventDefault();
+            };
+
+            editor.editorArea.addEventListener('click', onClick);
             editor.editorArea.addEventListener('mouseover', onMouseOver);
             editor.editorArea.addEventListener('mouseleave', onMouseLeave);
             const onShortcut = (e: KeyboardEvent) => {
@@ -840,7 +902,7 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                     if (!key) return;
                     const before = anchorDestinationState(a);
                     if (isDestination(key)) {
-                        applyLinkAttrs(a, `${tokenOpen}${key}${tokenClose}`, tokenOpen, tokenClose);
+                        applyLinkAttrs(a, `${tokenOpen}${key}${tokenClose}`, tokenOpen, tokenClose, isDestination);
                     } else {
                         a.removeAttribute('data-href-token');
                         a.setAttribute('href', `${tokenOpen}${key}${tokenClose}`);
@@ -869,6 +931,7 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                 bubble = null;
                 urlLabel = null;
                 urlNote = null;
+                editor.editorArea.removeEventListener('click', onClick);
                 editor.editorArea.removeEventListener('mouseover', onMouseOver);
                 editor.editorArea.removeEventListener('mouseleave', onMouseLeave);
                 editor.editorArea.removeEventListener('dblclick', onDblClick);
