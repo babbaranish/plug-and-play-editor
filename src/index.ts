@@ -9,7 +9,8 @@ export {
     LINKS_CANONICALIZE_COMMAND,
     tokenOnlyUrl,
     resolveTokenReference,
-    normalizeTokenHref
+    normalizeTokenHref,
+    DEFAULT_PLAIN_HREF_TOKEN
 } from './plugins/links';
 export type { LinksPluginOptions } from './plugins/links';
 export { MediaPlugin } from './plugins/media';

@@ -180,6 +180,12 @@ describe('button canonicalize', () => {
         expect(anchor(ed, 'btn').getAttribute('data-href-token')).toBe(FEE);
         expect(anchor(ed, 'btn').getAttribute('href')).toBe('#');
     });
+
+    it('does not rewrite an encoded payment key in a button href when nothing says it is one', () => {
+        const ed = mountWith(block(`%7B%7B${FEE}%7D%7D`), [buttons({ tokens: [] })]);
+        expect(anchor(ed, 'btn').getAttribute('href')).toBe(`%7B%7B${FEE}%7D%7D`);
+        expect(anchor(ed, 'btn').hasAttribute('data-href-token')).toBe(false);
+    });
 });
 
 describe('links canonicalize', () => {
