@@ -62,12 +62,20 @@ export function createTokensPlugin(options: TokensPluginOptions): Plugin {
                     range.deleteContents();
                     range.insertNode(span);
 
-                    // Add a space after and move cursor there
-                    const space = document.createTextNode('\u00a0');
-                    span.parentNode?.insertBefore(space, span.nextSibling);
+                    // Put the caret right after the chip without adding a character.
+                    // An existing text node that follows takes the caret at offset 0;
+                    // otherwise an empty text node (serialises to nothing) holds it.
+                    const after = span.nextSibling;
+                    let caretNode: Text;
+                    if (after && after.nodeType === Node.TEXT_NODE) {
+                        caretNode = after as Text;
+                    } else {
+                        caretNode = document.createTextNode('');
+                        span.parentNode?.insertBefore(caretNode, span.nextSibling);
+                    }
 
                     const newRange = document.createRange();
-                    newRange.setStartAfter(space);
+                    newRange.setStart(caretNode, 0);
                     newRange.collapse(true);
                     sel.removeAllRanges();
                     sel.addRange(newRange);
@@ -76,6 +84,8 @@ export function createTokensPlugin(options: TokensPluginOptions): Plugin {
                 }
 
                 editor.textArea.value = editor.editorArea.innerHTML;
+                // Let the host hear the insert, as it does for typing.
+                editor.notifyContentChange();
                 closeDropdown();
             }
 

@@ -30,9 +30,27 @@ export interface LinksPluginOptions {
      */
     acceptTokens?: Token[] | (() => Token[]);
     isDestinationToken?: (key: string) => boolean;
+    /**
+     * Which non-destination variables may be written into href as `{{key}}`.
+     *
+     * href is substituted without the checks the server applies when it lifts
+     * data-href-token, so only a key this allows is written there. Any other key
+     * keeps data-href-token with an inert href, and the server checks it. Defaults
+     * to {@link DEFAULT_PLAIN_HREF_TOKEN}. Destinations are not affected.
+     */
+    isPlainHrefToken?: (key: string) => boolean;
     /** Delimiter style — must match how those tokens get replaced elsewhere (default "double-curly") */
     delimiter?: 'double-curly' | 'single-curly' | 'percent';
 }
+
+/**
+ * The default {@link LinksPluginOptions.isPlainHrefToken}: a plain identifier of
+ * at most 64 characters, so no dot, colon, dash or dollar sign.
+ */
+export const DEFAULT_PLAIN_HREF_TOKEN = (key: string): boolean => /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(key);
+
+/** The inert href a variable carries when its key lives in data-href-token. */
+const INERT_HREF = '#';
 
 const ALLOWED_PROTOCOLS = ['http:', 'https:', 'mailto:'];
 
@@ -128,7 +146,39 @@ export function tokenOnlyUrl(url: string, open: string, close: string): string |
     return inner;
 }
 
-const INERT_HREF = '#';
+/**
+ * The variable a copy left behind in an href, or null.
+ *
+ * A copy resolves `{{key}}` against the page and percent encodes it, so the
+ * href becomes `https://<this site>/<path>/%7B%7Bkey%7D%7D`. That is recovered
+ * only when the address is on this origin, has no query or fragment, and its
+ * last path segment is exactly one variable once decoded. Any other origin, or
+ * anything that merely contains a variable, stays an address.
+ */
+function copiedTokenInner(href: string, open: string, close: string): string | null {
+    if (typeof window === 'undefined' || !window.location) return null;
+    if (href.includes('?') || href.includes('#')) return null;
+    let url: URL;
+    try {
+        url = new URL(href);
+    } catch {
+        return null;
+    }
+    if (url.origin !== window.location.origin || (url.protocol !== 'http:' && url.protocol !== 'https:')) return null;
+    const last = url.pathname.slice(url.pathname.lastIndexOf('/') + 1);
+    let decoded: string;
+    try {
+        decoded = decodeURIComponent(last);
+    } catch {
+        return null;
+    }
+    return tokenOnlyUrl(decoded.replace(/ /g, ' '), open, close);
+}
+
+/** The variable an anchor's href names, whether written plainly or left by a copy. */
+function hrefTokenInner(href: string, open: string, close: string): string | null {
+    return tokenOnlyUrl(normalizeTokenHref(href), open, close) ?? copiedTokenInner(href, open, close);
+}
 
 /**
  * Match what an author typed or pasted against the known variables, by key OR by
@@ -300,28 +350,53 @@ export function tokenUrlHint(value: string, options: TokenUrlHintOptions): Modal
     return { text: `Not a known variable. ${advice}`, tone: 'error' };
 }
 
+/**
+ * The key a bare reference names: the one listed variable it matches, or,
+ * when nothing matches, the reference itself if it is shaped like a key. A
+ * label shared by two variables names neither.
+ */
+function keyForReference(reference: string, tokens: Token[]): string | null {
+    const matches = tokenReferenceMatches(reference, tokens);
+    if (matches.length === 1) return matches[0];
+    return matches.length === 0 && isTokenKeyShaped(reference) ? reference : null;
+}
+
+/**
+ * The key an anchor's variable should be stored under, or null when it is
+ * already canonical or is not a variable at all.
+ */
 export function canonicalHrefToken(
     a: HTMLAnchorElement,
     tokens: Token[],
     open: string,
     close: string,
-    isDestination: (key: string) => boolean
+    isDestination: (key: string) => boolean,
+    isPlainHrefToken: (key: string) => boolean = DEFAULT_PLAIN_HREF_TOKEN
 ): string | null {
-    const keys = new Set(tokens.map((t) => t.key));
     const destination = (key: string) => isTokenKeyShaped(key) && isDestination(key);
     const stored = a.getAttribute('data-href-token');
     if (stored !== null && stored.trim()) {
         if (destination(stored)) return a.getAttribute('href') === `${open}${stored}${close}` ? null : stored;
-        if (keys.has(stored)) return null;
+        // Not a destination: an older save parked the variable in the attribute.
+        // A plain one belongs in href as {{key}}. Any other stays in the attribute
+        // behind an inert href, which is already its canonical form.
         const plain = normalizeTokenHref(stored).trim();
         const inner = tokenOnlyUrl(plain, open, close) ?? plain;
-        if (keys.has(inner) || destination(inner)) return inner;
-        return resolveTokenReference(inner, tokens);
+        if (destination(inner)) return inner;
+        const key = keyForReference(inner, tokens);
+        if (key === null) return null;
+        if (!isPlainHrefToken(key) && stored === key && a.getAttribute('href') === INERT_HREF) return null;
+        return key;
     }
-    const inner = tokenOnlyUrl(normalizeTokenHref(a.getAttribute('href') ?? ''), open, close);
+    const raw = a.getAttribute('href') ?? '';
+    const inner = hrefTokenInner(raw, open, close);
     if (inner === null) return null;
-    if (keys.has(inner)) return destination(inner) ? inner : null;
-    return resolveTokenReference(inner, tokens) ?? (destination(inner) ? inner : null);
+    const key = destination(inner) ? inner : keyForReference(inner, tokens);
+    if (key === null) return null;
+    if (destination(key)) return key;
+    // A variable already written as {{key}} in href is left as it is. An encoded,
+    // padded, label or copied form is rewritten to its key.
+    return raw === `${open}${key}${close}` ? null : key;
 }
 
 export function anchorDestinationState(a: HTMLAnchorElement): string {
@@ -331,7 +406,7 @@ export function anchorDestinationState(a: HTMLAnchorElement): string {
 export function mayHoldTokenDestination(a: HTMLAnchorElement, open: string, close: string): boolean {
     const stored = a.getAttribute('data-href-token');
     if (stored !== null && stored.trim()) return true;
-    return tokenOnlyUrl(normalizeTokenHref(a.getAttribute('href') ?? ''), open, close) !== null;
+    return hrefTokenInner(a.getAttribute('href') ?? '', open, close) !== null;
 }
 
 export function destinationKeyOf(a: HTMLAnchorElement, tokens: Token[], open: string, close: string): string | null {
@@ -351,9 +426,10 @@ export function applyLinkAttrsForTest(
     url: string,
     open: string,
     close: string,
-    isDestination: (key: string) => boolean = () => false
+    isDestination: (key: string) => boolean = () => false,
+    isPlainHrefToken: (key: string) => boolean = DEFAULT_PLAIN_HREF_TOKEN
 ): void {
-    applyLinkAttrs(a, url, open, close, isDestination);
+    applyLinkAttrs(a, url, open, close, isDestination, isPlainHrefToken);
 }
 
 export function embeddedDestinationKey(
@@ -378,17 +454,43 @@ function wholeUrlMessage(name: string): string {
     return `"${name}" has to be the whole Link URL, with nothing before or after it. Clear the field, then paste or pick it again.`;
 }
 
+/**
+ * Writes a variable into an anchor's href and data-href-token, in the form its
+ * kind takes. A destination keeps its key in data-href-token, which survives a
+ * copy. A plain variable is {{key}} in href with no attribute. Any other key
+ * goes in data-href-token behind an inert href, where the server checks it.
+ */
+function writeTokenHref(
+    a: HTMLAnchorElement,
+    key: string,
+    open: string,
+    close: string,
+    isDestination: (key: string) => boolean,
+    isPlainHrefToken: (key: string) => boolean
+): void {
+    if (isDestination(key)) {
+        a.setAttribute('data-href-token', key);
+        a.setAttribute('href', `${open}${key}${close}`);
+    } else if (isPlainHrefToken(key)) {
+        a.removeAttribute('data-href-token');
+        a.setAttribute('href', `${open}${key}${close}`);
+    } else {
+        a.setAttribute('data-href-token', key);
+        a.setAttribute('href', INERT_HREF);
+    }
+}
+
 function applyLinkAttrs(
     a: HTMLAnchorElement,
     url: string,
     open: string,
     close: string,
-    isDestination: (key: string) => boolean
+    isDestination: (key: string) => boolean,
+    isPlainHrefToken: (key: string) => boolean
 ): void {
     const token = tokenOnlyUrl(url, open, close);
     if (token) {
-        a.setAttribute('data-href-token', token);
-        a.setAttribute('href', isDestination(token) ? `${open}${token}${close}` : INERT_HREF);
+        writeTokenHref(a, token, open, close, isDestination, isPlainHrefToken);
     } else {
         // Re-pointing a token link at a real address must clear the token, or
         // the stale one wins wherever the document is resolved.
@@ -430,6 +532,13 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
             return options?.isDestinationToken
                 ? Boolean(options.isDestinationToken(key))
                 : readTokenSource(options?.acceptTokens).some((t) => t.key === key);
+        } catch {
+            return false;
+        }
+    };
+    const isPlainHrefToken = (key: string): boolean => {
+        try {
+            return options?.isPlainHrefToken ? Boolean(options.isPlainHrefToken(key)) : DEFAULT_PLAIN_HREF_TOKEN(key);
         } catch {
             return false;
         }
@@ -573,7 +682,7 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                         }
 
                         if (anchor) {
-                            applyLinkAttrs(anchor, url, tokenOpen, tokenClose, isDestination);
+                            applyLinkAttrs(anchor, url, tokenOpen, tokenClose, isDestination, isPlainHrefToken);
                             if (editable && text !== currentText) anchor.textContent = text;
                         } else {
                             insertNewLink(url, text, selectedText, savedRange);
@@ -629,7 +738,7 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                     editor.editorArea.querySelectorAll('a').forEach(a => {
                         const had = priorHref.has(a);
                         if (had && priorHref.get(a) === a.getAttribute('href')) return;
-                        applyLinkAttrs(a as HTMLAnchorElement, url, tokenOpen, tokenClose, isDestination);
+                        applyLinkAttrs(a as HTMLAnchorElement, url, tokenOpen, tokenClose, isDestination, isPlainHrefToken);
                         if (!had) keepTextColor(a as HTMLAnchorElement);
                     });
                     return;
@@ -637,7 +746,7 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
 
                 const a = document.createElement('a');
                 a.textContent = text;
-                applyLinkAttrs(a, url, tokenOpen, tokenClose, isDestination);
+                applyLinkAttrs(a, url, tokenOpen, tokenClose, isDestination, isPlainHrefToken);
 
                 const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
                 if (range) {
@@ -715,7 +824,7 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
                     // A variable has no address until something resolves it, so
                     // there is nothing to open. Opening the inert placeholder
                     // would just look broken.
-                    if (!a || a.hasAttribute('data-href-token')) return;
+                    if (!a || mayHoldTokenDestination(a, tokenOpen, tokenClose)) return;
                     const href = a.getAttribute('href');
                     if (href) window.open(href, '_blank', 'noopener,noreferrer');
                 });
@@ -891,21 +1000,27 @@ export function createLinksPlugin(options?: LinksPluginOptions): Plugin {
             function canonicalize(): boolean {
                 if (destroyed || editor.hasActiveContentSource()) return false;
                 if (editor.container.classList.contains('play-editor-preview-mode')) return false;
+                // With no destination rule and no acceptTokens, nothing says which key is
+                // a payment link. A stored key is then left exactly as it is, and a bare
+                // href is only rewritten when it names a plain variable.
+                const blind = !options?.isDestinationToken && readTokenSource(options?.acceptTokens).length === 0;
                 const anchors = Array.from(editor.editorArea.querySelectorAll<HTMLAnchorElement>('a')).filter(
-                    (a) => !a.closest('.play-editor-button-block') && mayHoldTokenDestination(a, tokenOpen, tokenClose)
+                    (a) => !a.closest('.play-editor-button-block') &&
+                        mayHoldTokenDestination(a, tokenOpen, tokenClose) &&
+                        !(blind && (a.getAttribute('data-href-token') ?? '').trim())
                 );
                 if (anchors.length === 0) return false;
                 const known = resolveAcceptable();
                 let changed = false;
                 anchors.forEach((a) => {
-                    const key = canonicalHrefToken(a, known, tokenOpen, tokenClose, isDestination);
+                    const key = canonicalHrefToken(a, known, tokenOpen, tokenClose, isDestination, isPlainHrefToken);
                     if (!key) return;
+                    if (blind && !isPlainHrefToken(key)) return;
                     const before = anchorDestinationState(a);
                     if (isDestination(key)) {
-                        applyLinkAttrs(a, `${tokenOpen}${key}${tokenClose}`, tokenOpen, tokenClose, isDestination);
+                        applyLinkAttrs(a, `${tokenOpen}${key}${tokenClose}`, tokenOpen, tokenClose, isDestination, isPlainHrefToken);
                     } else {
-                        a.removeAttribute('data-href-token');
-                        a.setAttribute('href', `${tokenOpen}${key}${tokenClose}`);
+                        writeTokenHref(a, key, tokenOpen, tokenClose, isDestination, isPlainHrefToken);
                     }
                     if (anchorDestinationState(a) !== before) changed = true;
                 });

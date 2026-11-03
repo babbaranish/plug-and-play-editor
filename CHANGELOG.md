@@ -5,6 +5,39 @@ format follows [Keep a Changelog](https://keepachangelog.com/), and the
 project adheres to [Semantic Versioning](https://semver.org/) while
 pre-1.0 (minor versions may contain breaking changes).
 
+## [0.12.0] - 2026-11-03
+
+### Added
+
+- **Matching tag highlight in the source view.** With the caret inside an
+  opening or closing tag, that tag and its partner are highlighted, also in
+  nested markup. Void and self-closing tags, comments and the bodies of
+  `<script>` and `<style>` are skipped.
+
+### Changed
+
+- **The source view opens formatted.** HTML is indented by block when the
+  view opens. Leaving the view without editing keeps the content exactly as it
+  was, so opening it never changes the document.
+- **A link to a plain variable keeps it in `href`.** Edit Link and Insert Link
+  now write a variable that is not a destination (`isDestinationToken`) as
+  `href="{{key}}"` with no `data-href-token`, where they used to write
+  `href="#"` and keep the key in the attribute. Destinations (payment links)
+  are unchanged. Links saved in the old form, and plain variables whose href
+  was percent encoded, padded or written as a label, are rewritten to
+  `href="{{key}}"` when the editor loads them. The link bubble no longer opens
+  a variable as an address.
+
+### Fixed
+
+- **Inserting a variable added a space after it.** A chip is now inserted with
+  nothing after it, and the caret lands right after the chip.
+- **Format changed how the email looked.** It turned `&nbsp;` into spaces,
+  dropped the space between inline tags, added spaces next to inline tags and
+  re-indented `<pre>`. It now only changes whitespace between blocks: text
+  inside a paragraph or cell is kept byte for byte, and `<pre>`, `<textarea>`,
+  `<script>`, `<style>` and `<code>` are left as they are.
+
 ## [0.11.1] - 2026-10-16
 
 ### Fixed

@@ -105,11 +105,13 @@ describe('isValidLinkUrl \u2014 scheme-check normalization', () => {
 });
 
 describe('a link whose destination is a variable', () => {
-    // An href holds text, so a variable typed into the URL field is
-    // percent-encoded by the browser and indistinguishable from a real address
-    // afterwards. It is stored in data-href-token instead, with an inert href.
+    // A copy rewrites an href into an absolute, percent-encoded address, so a
+    // destination (a payment link the host resolves per recipient) also keeps
+    // its key in data-href-token, which restores the href. Any other variable
+    // is plain {{key}} in href, the form every renderer substitutes.
     const open = '{{';
     const close = '}}';
+    const isFee = (key: string) => key === 'payment_link';
 
     const dialogFor = (html: string) => {
         const host = document.createElement('div');
@@ -117,11 +119,39 @@ describe('a link whose destination is a variable', () => {
         return host.querySelector('a') as HTMLAnchorElement;
     };
 
-    it('stores a token-only URL as a destination attribute, never in href', () => {
+    it('writes a destination into href and into data-href-token', () => {
         const a = dialogFor('<a>Pay</a>');
-        applyLinkAttrsForTest(a, '{{payment_link}}', open, close);
+        applyLinkAttrsForTest(a, '{{payment_link}}', open, close, isFee);
         expect(a.getAttribute('data-href-token')).toBe('payment_link');
-        expect(a.getAttribute('href')).toBe('#');
+        expect(a.getAttribute('href')).toBe('{{payment_link}}');
+    });
+
+    it('writes a plain variable into href as {{key}}, with no data-href-token', () => {
+        const a = dialogFor('<a>Pay</a>');
+        applyLinkAttrsForTest(a, '{{gclid}}', open, close);
+        expect(a.getAttribute('href')).toBe('{{gclid}}');
+        expect(a.hasAttribute('data-href-token')).toBe(false);
+    });
+
+    it('writes the key of a plain variable written with spaces around it', () => {
+        const a = dialogFor('<a>Pay</a>');
+        applyLinkAttrsForTest(a, '{{ gclid }}', open, close);
+        expect(a.getAttribute('href')).toBe('{{gclid}}');
+        expect(a.hasAttribute('data-href-token')).toBe(false);
+    });
+
+    it('respects the delimiter style of the host', () => {
+        const a = dialogFor('<a>Pay</a>');
+        applyLinkAttrsForTest(a, '[[gclid]]', '[[', ']]');
+        expect(a.getAttribute('href')).toBe('[[gclid]]');
+        expect(a.hasAttribute('data-href-token')).toBe(false);
+    });
+
+    it('drops the data-href-token of a destination once it is a plain variable', () => {
+        const a = dialogFor('<a href="{{payment_link}}" data-href-token="payment_link">Pay</a>');
+        applyLinkAttrsForTest(a, '{{gclid}}', open, close, isFee);
+        expect(a.hasAttribute('data-href-token')).toBe(false);
+        expect(a.getAttribute('href')).toBe('{{gclid}}');
     });
 
     it('keeps a real address in href and carries no token', () => {
@@ -236,5 +266,46 @@ describe('variables accepted but not listed', () => {
 
     it('still refuses one that is in neither list', () => {
         expect(resolveTokenReference('Hostel Fee, Link 1: Payment page', [...shown, ...unlisted])).toBeNull();
+    });
+});
+
+describe('a variable that is not a plain href token', () => {
+    // The server checks a key lifted from data-href-token, but href is substituted
+    // as it is. Only a plain key may go into href, so anything else is kept in
+    // data-href-token behind the inert href.
+    const open = '{{';
+    const close = '}}';
+    const dialogFor = () => {
+        const host = document.createElement('div');
+        host.innerHTML = '<a>Join</a>';
+        return host.querySelector('a') as HTMLAnchorElement;
+    };
+
+    it.each(['a.b', 'x-y', 'a'.repeat(65), 'token:dynamic_offer_pdf_hros'])('keeps %s in data-href-token with an inert href', (key) => {
+        const a = dialogFor();
+        applyLinkAttrsForTest(a, `{{${key}}}`, open, close);
+        expect(a.getAttribute('data-href-token')).toBe(key);
+        expect(a.getAttribute('href')).toBe('#');
+    });
+
+    it('keeps a name the host denies in data-href-token, though the default would allow it', () => {
+        const a = dialogFor();
+        applyLinkAttrsForTest(a, '{{defaultPassword}}', open, close, () => false, (key) => key !== 'defaultPassword');
+        expect(a.getAttribute('data-href-token')).toBe('defaultPassword');
+        expect(a.getAttribute('href')).toBe('#');
+    });
+
+    it('writes a plain name the host allows as {{key}} with no attribute', () => {
+        const a = dialogFor();
+        applyLinkAttrsForTest(a, '{{login_url}}', open, close, () => false, (key) => key === 'login_url');
+        expect(a.getAttribute('href')).toBe('{{login_url}}');
+        expect(a.hasAttribute('data-href-token')).toBe(false);
+    });
+
+    it('still keeps a destination in href and data-href-token whatever the name', () => {
+        const a = dialogFor();
+        applyLinkAttrsForTest(a, '{{Fee:abc:link-1:PaymentLink}}', open, close, (key) => key.startsWith('Fee:'), () => false);
+        expect(a.getAttribute('data-href-token')).toBe('Fee:abc:link-1:PaymentLink');
+        expect(a.getAttribute('href')).toBe('{{Fee:abc:link-1:PaymentLink}}');
     });
 });

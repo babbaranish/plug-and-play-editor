@@ -7,7 +7,8 @@ import {
     tokenUrlHint,
     canonicalHrefToken,
     displayUrlForTest,
-    resolveEmbeddedTokens
+    resolveEmbeddedTokens,
+    DEFAULT_PLAIN_HREF_TOKEN
 } from './links';
 import { generateButtonHtmlForTest } from './button-block';
 
@@ -188,10 +189,28 @@ describe('canonicalHrefToken', () => {
 
     it('leaves canonical and unresolvable values alone', () => {
         expect(plan(`<a href="{{${FEE}}}" data-href-token="${FEE}">x</a>`)).toBeNull();
-        expect(plan('<a href="#" data-href-token="login_url">x</a>')).toBeNull();
         expect(plan('<a href="{{login_url}}">x</a>')).toBeNull();
+        expect(plan('<a href="{{applicantMeetingLink}}">x</a>')).toBeNull();
         expect(plan('<a href="{{Hostel Fee}}">x</a>')).toBeNull();
         expect(plan('<a href="https://x.test">x</a>')).toBeNull();
+    });
+
+    it('moves a plain variable out of data-href-token into href', () => {
+        expect(plan('<a href="#" data-href-token="login_url">x</a>')).toBe('login_url');
+        expect(plan('<a href="#" data-href-token="applicantMeetingLink">x</a>')).toBe('applicantMeetingLink');
+    });
+
+    it('rewrites an encoded or padded plain variable to {{key}}', () => {
+        expect(plan('<a href="%7B%7Blogin_url%7D%7D">x</a>')).toBe('login_url');
+        expect(plan('<a href="%7B%7BapplicantMeetingLink%7D%7D">x</a>')).toBe('applicantMeetingLink');
+        expect(plan('<a href="{{ login_url }}">x</a>')).toBe('login_url');
+        expect(plan('<a href="{{Login Link}}">x</a>')).toBe('login_url');
+    });
+
+    it('leaves a label shared by two variables alone, even when it has the shape of a key', () => {
+        const shared = [{ key: 'login_a', label: 'Login' }, { key: 'login_b', label: 'Login' }];
+        const host = (href: string) => canonicalHrefToken(anchor(`<a href="${href}">x</a>`), shared, '{{', '}}', () => false);
+        expect(host('{{Login}}')).toBeNull();
     });
 
     it('moves exact destination keys, listed or not', () => {
@@ -237,5 +256,74 @@ describe('generateButtonHtml for a destination', () => {
         const a = anchor(generateButtonHtmlForTest(cfg({ url: 'https://x.test', target: '_self', rel: 'nofollow' })));
         expect(a.getAttribute('target')).toBe('_self');
         expect(a.getAttribute('rel')).toBe('nofollow');
+    });
+});
+
+describe('DEFAULT_PLAIN_HREF_TOKEN', () => {
+    it('accepts a plain identifier of up to 64 characters', () => {
+        expect(DEFAULT_PLAIN_HREF_TOKEN('login_url')).toBe(true);
+        expect(DEFAULT_PLAIN_HREF_TOKEN('applicantMeetingLink')).toBe(true);
+        expect(DEFAULT_PLAIN_HREF_TOKEN('a'.repeat(64))).toBe(true);
+    });
+
+    it('refuses dots, dashes, colons, dollar signs, a leading digit, an empty key and 65 characters', () => {
+        expect(DEFAULT_PLAIN_HREF_TOKEN('a.b')).toBe(false);
+        expect(DEFAULT_PLAIN_HREF_TOKEN('x-y')).toBe(false);
+        expect(DEFAULT_PLAIN_HREF_TOKEN('token:dynamic_offer_pdf_hros')).toBe(false);
+        expect(DEFAULT_PLAIN_HREF_TOKEN('$x')).toBe(false);
+        expect(DEFAULT_PLAIN_HREF_TOKEN('1st')).toBe(false);
+        expect(DEFAULT_PLAIN_HREF_TOKEN('')).toBe(false);
+        expect(DEFAULT_PLAIN_HREF_TOKEN('a'.repeat(65))).toBe(false);
+    });
+});
+
+describe('canonicalHrefToken with isPlainHrefToken', () => {
+    const tokens = [...FEES, { key: 'login_url', label: 'Login Link' }];
+    const isFee = (key: string) => key.startsWith('Fee:');
+    const plan = (html: string, isPlain?: (key: string) => boolean) =>
+        canonicalHrefToken(anchor(html), tokens, '{{', '}}', isFee, isPlain);
+
+    it('leaves a denied name in data-href-token behind its inert href, and says nothing more to do', () => {
+        const denyDefault = (key: string) => key !== 'defaultPassword';
+        expect(plan('<a href="#" data-href-token="defaultPassword">x</a>', denyDefault)).toBeNull();
+        expect(plan('<a href="#" data-href-token="a.b">x</a>')).toBeNull();
+    });
+
+    it('upgrades a denied name written encoded, so it is kept in the old form', () => {
+        expect(plan('<a href="%7B%7Ba.b%7D%7D">x</a>')).toBe('a.b');
+        expect(plan('<a href="%7B%7BdefaultPassword%7D%7D">x</a>', (k) => k !== 'defaultPassword')).toBe('defaultPassword');
+    });
+
+    it('moves a plain name the host allows out of data-href-token', () => {
+        expect(plan('<a href="#" data-href-token="defaultPassword">x</a>')).toBe('defaultPassword');
+    });
+});
+
+describe('canonicalHrefToken recovers a variable a copy left in href', () => {
+    const origin = window.location.origin;
+    const tokens = [{ key: 'login_url', label: 'Login Link' }];
+    const plan = (href: string) => canonicalHrefToken(anchor(`<a href="${href}">x</a>`), tokens, '{{', '}}', () => false);
+
+    it('recovers the key from a same origin address with a path prefix', () => {
+        expect(plan(`${origin}/admin/templates/%7B%7Blogin_url%7D%7D`)).toBe('login_url');
+    });
+
+    it('recovers a label from a same origin address, decoding its spaces', () => {
+        expect(plan(`${origin}/admin/templates/%7B%7BLogin%20Link%7D%7D`)).toBe('login_url');
+    });
+
+    it('does not recover from another origin', () => {
+        expect(plan('https://elsewhere.test/admin/templates/%7B%7Blogin_url%7D%7D')).toBeNull();
+        expect(plan('https://admin.example.com/admin/templates/%7B%7Blogin_url%7D%7D')).toBeNull();
+    });
+
+    it('does not recover when the address has a query or a fragment', () => {
+        expect(plan(`${origin}/admin/templates/%7B%7Blogin_url%7D%7D?x=1`)).toBeNull();
+        expect(plan(`${origin}/admin/templates/%7B%7Blogin_url%7D%7D#top`)).toBeNull();
+    });
+
+    it('does not recover more than one variable from the last segment', () => {
+        expect(plan('https://x/{{a}}{{b}}')).toBeNull();
+        expect(plan(`${origin}/%7B%7Blogin_url%7D%7D%7B%7Bother%7D%7D`)).toBeNull();
     });
 });

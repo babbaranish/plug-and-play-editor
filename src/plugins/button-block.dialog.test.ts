@@ -795,3 +795,46 @@ describe('Pasting a chip into the button dialog', () => {
         expect(url.value).toBe('https://');
     });
 });
+
+describe('Plain href tokens in the button dialog', () => {
+    const denyPassword: ButtonBlockPluginOptions = {
+        tokens: [...MERGE, ...FEES],
+        isDestinationToken: isPaymentLink,
+        isPlainHrefToken: (key) => key !== 'defaultPassword'
+    };
+
+    it.each(['a.b', 'x-y', 'a'.repeat(65)])('keeps the unlisted name %s in data-href-token behind an inert href', (name) => {
+        const ed = mount('<p id="p">Open</p>');
+        select(ed.editorArea.querySelector('#p')!.firstChild!, 4);
+        insertWithUrl(ed, `{{${name}}}`);
+        expect(errorText(ed)).toBe('');
+        expect(anchorOf(ed)!.getAttribute('data-href-token')).toBe(name);
+        expect(anchorOf(ed)!.getAttribute('href')).toBe('#');
+    });
+
+    it('keeps a name the host denies in data-href-token, though the default would allow it', () => {
+        const ed = mount('<p id="p">Open</p>', denyPassword);
+        select(ed.editorArea.querySelector('#p')!.firstChild!, 4);
+        insertWithUrl(ed, '{{defaultPassword}}');
+        expect(errorText(ed)).toBe('');
+        expect(anchorOf(ed)!.getAttribute('data-href-token')).toBe('defaultPassword');
+        expect(anchorOf(ed)!.getAttribute('href')).toBe('#');
+    });
+
+    it('still writes a plain name the host allows raw in href', () => {
+        const ed = mount('<p id="p">Log in</p>', denyPassword);
+        select(ed.editorArea.querySelector('#p')!.firstChild!, 6);
+        insertWithUrl(ed, '{{login_url}}');
+        expect(anchorOf(ed)!.getAttribute('href')).toBe('{{login_url}}');
+        expect(anchorOf(ed)!.hasAttribute('data-href-token')).toBe(false);
+    });
+
+    it('keeps a denied name on Update, and does not rewrite it into href', () => {
+        const ed = mount(existingBlock('href="#" data-href-token="defaultPassword"'), denyPassword);
+        anchorOf(ed)!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        submit(ed);
+        expect(errorText(ed)).toBe('');
+        expect(anchorOf(ed)!.getAttribute('data-href-token')).toBe('defaultPassword');
+        expect(anchorOf(ed)!.getAttribute('href')).toBe('#');
+    });
+});

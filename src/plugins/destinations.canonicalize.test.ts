@@ -146,6 +146,40 @@ describe('button canonicalize', () => {
         const ed = mountWith(`<p><a id="plain" href="{{${LABEL}}}">Pay</a></p>`, [buttons()]);
         expect(anchor(ed, 'plain').getAttribute('href')).toBe(`{{${LABEL}}}`);
     });
+    it('writes a legacy plain variable held in data-href-token into href as {{key}}', () => {
+        const ed = mountWith(block('#', ' data-href-token="login_url"'), [buttons()]);
+        expect(anchor(ed, 'btn').getAttribute('href')).toBe('{{login_url}}');
+        expect(anchor(ed, 'btn').hasAttribute('data-href-token')).toBe(false);
+    });
+
+    it.each(['a.b', 'x-y', 'a'.repeat(65)])('keeps the name %s in data-href-token behind an inert href', (name) => {
+        const ed = mountWith(block('#', ` data-href-token="${name}"`), [buttons()]);
+        expect(anchor(ed, 'btn').getAttribute('data-href-token')).toBe(name);
+        expect(anchor(ed, 'btn').getAttribute('href')).toBe('#');
+        expect(ed.runCommand(BUTTON_BLOCK_CANONICALIZE_COMMAND)).toBe(false);
+    });
+
+    it('keeps a name the host denies in data-href-token, though the default would allow it', () => {
+        const ed = mountWith(block('#', ' data-href-token="defaultPassword"'), [buttons({
+            tokens: MERGE,
+            isDestinationToken: isPaymentLink,
+            isPlainHrefToken: (key) => key !== 'defaultPassword'
+        })]);
+        expect(anchor(ed, 'btn').getAttribute('data-href-token')).toBe('defaultPassword');
+        expect(anchor(ed, 'btn').getAttribute('href')).toBe('#');
+    });
+
+    it('moves an encoded name the default refuses into data-href-token behind an inert href', () => {
+        const ed = mountWith(block('%7B%7Ba.b%7D%7D'), [buttons()]);
+        expect(anchor(ed, 'btn').getAttribute('data-href-token')).toBe('a.b');
+        expect(anchor(ed, 'btn').getAttribute('href')).toBe('#');
+    });
+
+    it('leaves a stored payment key alone when the host gave no destination rule and no acceptTokens', () => {
+        const ed = mountWith(block('#', ` data-href-token="${FEE}"`), [buttons({ tokens: [] })]);
+        expect(anchor(ed, 'btn').getAttribute('data-href-token')).toBe(FEE);
+        expect(anchor(ed, 'btn').getAttribute('href')).toBe('#');
+    });
 });
 
 describe('links canonicalize', () => {
@@ -215,10 +249,23 @@ describe('links canonicalize', () => {
         expect(anchor(ed, 'a').getAttribute('href')).toBe(`{{${FEE}}}`);
     });
 
-    it('leaves a non destination key held in data-href-token as it is', () => {
+    it('moves a non destination key an older save held in data-href-token into href', () => {
         const ed = mountWith('<p><a id="a" href="#" data-href-token="login_url">log in</a></p>', [links()]);
-        expect(anchor(ed, 'a').getAttribute('href')).toBe('#');
-        expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe('login_url');
+        expect(anchor(ed, 'a').getAttribute('href')).toBe('{{login_url}}');
+        expect(anchor(ed, 'a').hasAttribute('data-href-token')).toBe(false);
+    });
+
+    it('moves an unlisted key-shaped non destination held in data-href-token into href', () => {
+        const ed = mountWith('<p><a id="a" href="#" data-href-token="applicantMeetingLink">Join</a></p>', [links()]);
+        expect(anchor(ed, 'a').getAttribute('href')).toBe('{{applicantMeetingLink}}');
+        expect(anchor(ed, 'a').hasAttribute('data-href-token')).toBe(false);
+    });
+
+    it('leaves a plain variable already written as {{key}} untouched', () => {
+        const ed = mountWith('<p><a id="a" href="{{login_url}}" target="_blank">log in</a></p>', [links()]);
+        expect(ed.runCommand(LINKS_CANONICALIZE_COMMAND)).toBe(false);
+        expect(anchor(ed, 'a').getAttribute('href')).toBe('{{login_url}}');
+        expect(anchor(ed, 'a').hasAttribute('data-href-token')).toBe(false);
     });
 
     it('treats acceptTokens as the destinations when isDestinationToken is not given', () => {
@@ -273,6 +320,66 @@ describe('links canonicalize', () => {
         );
         expect(anchor(ed, 'btn').getAttribute('data-href-token')).toBe(FEE);
         expect(anchor(ed, 'plain').getAttribute('data-href-token')).toBe(FEE);
+    });
+    it.each(['a.b', 'x-y', 'a'.repeat(65)])('keeps the name %s in data-href-token behind an inert href', (name) => {
+        const ed = mountWith(`<p><a id="a" href="#" data-href-token="${name}">x</a></p>`, [links()]);
+        expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe(name);
+        expect(anchor(ed, 'a').getAttribute('href')).toBe('#');
+    });
+
+    it('keeps a name the host denies in data-href-token, though the default would allow it', () => {
+        const ed = mountWith('<p><a id="a" href="#" data-href-token="defaultPassword">x</a></p>', [links({
+            tokens: MERGE,
+            acceptTokens: FEES,
+            isDestinationToken: isPaymentLink,
+            isPlainHrefToken: (key) => key !== 'defaultPassword'
+        })]);
+        expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe('defaultPassword');
+        expect(anchor(ed, 'a').getAttribute('href')).toBe('#');
+    });
+
+    it('moves an encoded name the default refuses into data-href-token behind an inert href', () => {
+        const ed = mountWith('<p><a id="a" href="%7B%7Ba.b%7D%7D">x</a></p>', [links()]);
+        expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe('a.b');
+        expect(anchor(ed, 'a').getAttribute('href')).toBe('#');
+    });
+
+    it('restores a plain variable a copy made absolute and encoded, on this origin', () => {
+        const ed = mountWith(`<p><a id="a" href="${window.location.origin}/admin/templates/%7B%7Blogin_url%7D%7D">Log in</a></p>`, [links()]);
+        expect(anchor(ed, 'a').getAttribute('href')).toBe('{{login_url}}');
+        expect(anchor(ed, 'a').hasAttribute('data-href-token')).toBe(false);
+    });
+
+    it('restores a denied name a copy made absolute, into data-href-token behind an inert href', () => {
+        const ed = mountWith(`<p><a id="a" href="${window.location.origin}/admin/templates/%7B%7Ba.b%7D%7D">x</a></p>`, [links()]);
+        expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe('a.b');
+        expect(anchor(ed, 'a').getAttribute('href')).toBe('#');
+    });
+
+    it('does not restore a variable from an address on another origin', () => {
+        const ed = mountWith('<p><a id="a" href="https://elsewhere.test/admin/templates/%7B%7Blogin_url%7D%7D">x</a></p>', [links()]);
+        expect(ed.runCommand(LINKS_CANONICALIZE_COMMAND)).toBe(false);
+        expect(anchor(ed, 'a').getAttribute('href')).toBe('https://elsewhere.test/admin/templates/%7B%7Blogin_url%7D%7D');
+        expect(anchor(ed, 'a').hasAttribute('data-href-token')).toBe(false);
+    });
+
+    it('leaves a stored payment key alone when the host gave no destination rule and no acceptTokens', () => {
+        const ed = mountWith(`<p><a id="a" href="#" data-href-token="${FEE}">Pay</a></p>`, [links({ tokens: [] })]);
+        expect(ed.runCommand(LINKS_CANONICALIZE_COMMAND)).toBe(false);
+        expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe(FEE);
+        expect(anchor(ed, 'a').getAttribute('href')).toBe('#');
+    });
+
+    it('does not rewrite an encoded payment key in href when nothing says it is one', () => {
+        const ed = mountWith(`<p><a id="a" href="%7B%7B${FEE}%7D%7D">Pay</a></p>`, [links({ tokens: [] })]);
+        expect(anchor(ed, 'a').getAttribute('href')).toBe(`%7B%7B${FEE}%7D%7D`);
+        expect(anchor(ed, 'a').hasAttribute('data-href-token')).toBe(false);
+    });
+
+    it('still rewrites a plain label when nothing says which keys are destinations', () => {
+        const ed = mountWith('<p><a id="a" href="{{Login Link}}">log in</a></p>', [links({ tokens: MERGE })]);
+        expect(anchor(ed, 'a').getAttribute('href')).toBe('{{login_url}}');
+        expect(anchor(ed, 'a').hasAttribute('data-href-token')).toBe(false);
     });
 });
 
@@ -417,7 +524,7 @@ describe('Edit Link', () => {
     });
 
     it('keeps a destination the lists do not know when the URL is left alone', () => {
-        const ed = mountWith(`<p><a id="a" href="#" data-href-token="${FEE}">Pay</a></p>`, [links({ tokens: [] })]);
+        const ed = mountWith(`<p><a id="a" href="#" data-href-token="${FEE}">Pay</a></p>`, [links({ tokens: [], isDestinationToken: isPaymentLink })]);
         openEdit(ed, 'a');
         expect(field(ed, 'url')!.value).toBe(`{{${FEE}}}`);
         field(ed, 'text')!.value = 'Pay now';
@@ -425,6 +532,33 @@ describe('Edit Link', () => {
         expect(errorText(ed)).toBe('');
         expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe(FEE);
         expect(anchor(ed, 'a').textContent).toBe('Pay now');
+    });
+
+    it('keeps a destination when nothing says it is one, with the URL left alone', () => {
+        const ed = mountWith(`<p><a id="a" href="#" data-href-token="${FEE}">Pay</a></p>`, [links({ tokens: [] })]);
+        openEdit(ed, 'a');
+        submit(ed);
+        expect(errorText(ed)).toBe('');
+        expect(modal(ed)).toBeNull();
+        expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe(FEE);
+        expect(anchor(ed, 'a').getAttribute('href')).toBe('#');
+    });
+
+    it.each(['a.b', 'defaultPassword'])('writes the listed %s as data-href-token behind an inert href', (name) => {
+        // The default refuses a.b; the host refuses defaultPassword, which the default would allow.
+        const host = name === 'defaultPassword' ? { isPlainHrefToken: (key: string) => key !== 'defaultPassword' } : {};
+        const ed = mountWith('<p><a id="a" href="https://x.test/">Join</a></p>', [links({
+            tokens: MERGE,
+            acceptTokens: [...FEES, { key: name, label: 'Listed name' }],
+            isDestinationToken: isPaymentLink,
+            ...host
+        })]);
+        openEdit(ed, 'a');
+        field(ed, 'url')!.value = `{{${name}}}`;
+        submit(ed);
+        expect(errorText(ed)).toBe('');
+        expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe(name);
+        expect(anchor(ed, 'a').getAttribute('href')).toBe('#');
     });
 
     it('warns in the hint about a variable it will refuse', () => {
@@ -563,18 +697,29 @@ describe('Edit Link', () => {
         submit(ed);
         expect(errorText(ed)).toBe('');
         expect(modal(ed)).toBeNull();
-        expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe('applicantMeetingLink');
-        expect(anchor(ed, 'a').getAttribute('href')).toBe('#');
+        expect(anchor(ed, 'a').hasAttribute('data-href-token')).toBe(false);
+        expect(anchor(ed, 'a').getAttribute('href')).toBe('{{applicantMeetingLink}}');
         expect(anchor(ed, 'a').textContent).toBe('Join the call');
     });
 
-    it('keeps a percent encoded raw key the lists do not contain when the URL is left alone', () => {
+    it('shows the label of a listed plain variable and writes it back as {{key}}', () => {
+        const ed = mountWith('<p><a id="a" href="{{login_url}}">log in</a></p>', [links()]);
+        openEdit(ed, 'a');
+        expect(field(ed, 'url')!.value).toBe('{{Login Link}}');
+        submit(ed);
+        expect(errorText(ed)).toBe('');
+        expect(anchor(ed, 'a').getAttribute('href')).toBe('{{login_url}}');
+        expect(anchor(ed, 'a').hasAttribute('data-href-token')).toBe(false);
+    });
+
+    it('writes a percent encoded raw key the lists do not contain back as {{key}}', () => {
         const ed = mountWith('<p><a id="a" href="%7B%7BapplicantMeetingLink%7D%7D">Join</a></p>', [links()]);
         openEdit(ed, 'a');
         expect(field(ed, 'url')!.value).toBe('{{applicantMeetingLink}}');
         submit(ed);
         expect(errorText(ed)).toBe('');
-        expect(anchor(ed, 'a').getAttribute('data-href-token')).toBe('applicantMeetingLink');
+        expect(anchor(ed, 'a').hasAttribute('data-href-token')).toBe(false);
+        expect(anchor(ed, 'a').getAttribute('href')).toBe('{{applicantMeetingLink}}');
     });
 
     it('still refuses an unknown key the URL was changed to', () => {
@@ -691,6 +836,15 @@ describe('clicking a link', () => {
         expect(click(ed, 'old')).toBe(true);
         expect(click(ed, 'raw')).toBe(true);
         expect(click(ed, 'site')).toBe(false);
+    });
+
+    it('does not open a plain variable link from the bubble', () => {
+        const ed = mountWith('<p><a id="raw" href="{{login_url}}">log in</a></p>', [links()]);
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        anchor(ed, 'raw').dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+        ed.container.querySelector<HTMLButtonElement>('.play-editor-link-bubble button[title="Open link"]')!.click();
+        expect(open).not.toHaveBeenCalled();
+        open.mockRestore();
     });
 });
 

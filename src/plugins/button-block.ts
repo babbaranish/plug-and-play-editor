@@ -7,6 +7,7 @@ import { DEFAULT_EMAIL_TOKENS, DELIMITER_MAP } from './tokens';
 import {
     anchorDestinationState,
     canonicalHrefToken,
+    DEFAULT_PLAIN_HREF_TOKEN,
     destinationKeyOf,
     isTokenKeyShaped,
     mayHoldTokenDestination,
@@ -24,6 +25,12 @@ export interface ButtonBlockPluginOptions {
     tokens?: Token[] | (() => Token[]);
     acceptTokens?: Token[] | (() => Token[]);
     isDestinationToken?: (key: string) => boolean;
+    /**
+     * Which non-destination variables may be written into a button's href as
+     * `{{key}}`. Any other key is kept in data-href-token behind an inert href,
+     * where the server checks it. Defaults to DEFAULT_PLAIN_HREF_TOKEN.
+     */
+    isPlainHrefToken?: (key: string) => boolean;
     /** Delimiter style — must match how those tokens get replaced elsewhere (default "double-curly") */
     delimiter?: 'double-curly' | 'single-curly' | 'percent';
 }
@@ -222,6 +229,7 @@ interface ButtonDialogContext {
     tokenOpen: string;
     tokenClose: string;
     isDestination: (key: string) => boolean;
+    isPlainHrefToken: (key: string) => boolean;
 }
 
 function refuseUnknownToken(inner: string, ambiguous: boolean, ctx: ButtonDialogContext): string {
@@ -259,9 +267,12 @@ function resolveButtonUrl(url: string, ctx: ButtonDialogContext): { url: string;
         else if (matches.length === 0 && isTokenKeyShaped(inner)) key = inner;
         else return refuseUnknownToken(inner, matches.length > 1, ctx);
     }
-    return ctx.isDestination(key)
-        ? { url: INERT_HREF, hrefToken: key }
-        : { url: `${tokenOpen}${key}${tokenClose}`, hrefToken: null };
+    if (ctx.isDestination(key)) return { url: INERT_HREF, hrefToken: key };
+    // Only a plain variable goes into href raw. Any other key is parked in
+    // data-href-token behind an inert href, so the server checks it.
+    return ctx.isPlainHrefToken(key)
+        ? { url: `${tokenOpen}${key}${tokenClose}`, hrefToken: null }
+        : { url: INERT_HREF, hrefToken: key };
 }
 
 const PARAGRAPH_TAG = /^(P|H[1-6])$/;
@@ -511,6 +522,13 @@ export function createButtonBlockPlugin(options?: ButtonBlockPluginOptions): Plu
             return false;
         }
     };
+    const isPlainHrefToken = (key: string): boolean => {
+        try {
+            return options?.isPlainHrefToken ? Boolean(options.isPlainHrefToken(key)) : DEFAULT_PLAIN_HREF_TOKEN(key);
+        } catch {
+            return false;
+        }
+    };
     const [tokenOpen, tokenClose] = DELIMITER_MAP[options?.delimiter || 'double-curly'];
 
     return {
@@ -549,7 +567,8 @@ export function createButtonBlockPlugin(options?: ButtonBlockPluginOptions): Plu
                     known,
                     tokenOpen,
                     tokenClose,
-                    isDestination
+                    isDestination,
+                    isPlainHrefToken
                 };
             };
 
@@ -591,16 +610,22 @@ export function createButtonBlockPlugin(options?: ButtonBlockPluginOptions): Plu
 
             function canonicalize(): boolean {
                 if (destroyed || inAlternateView()) return false;
+                // With no destination rule and no acceptTokens, nothing says which key is
+                // a payment link. A stored key is then left exactly as it is, and a bare
+                // href is only rewritten when it names a plain variable.
+                const blind = !options?.isDestinationToken && acceptedTokens().length === 0;
                 const anchors = Array.from(editor.editorArea.querySelectorAll<HTMLAnchorElement>('.play-editor-button-block a'))
-                    .filter((a) => mayHoldTokenDestination(a, tokenOpen, tokenClose));
+                    .filter((a) => mayHoldTokenDestination(a, tokenOpen, tokenClose) &&
+                        !(blind && (a.getAttribute('data-href-token') ?? '').trim()));
                 if (anchors.length === 0) return false;
                 const known = [...pickerTokens(), ...acceptedTokens()];
                 let changed = false;
                 anchors.forEach((a) => {
-                    const key = canonicalHrefToken(a, known, tokenOpen, tokenClose, isDestination);
+                    const key = canonicalHrefToken(a, known, tokenOpen, tokenClose, isDestination, isPlainHrefToken);
                     if (!key) return;
+                    if (blind && !isPlainHrefToken(key)) return;
                     const before = anchorDestinationState(a);
-                    if (isDestination(key)) {
+                    if (isDestination(key) || !isPlainHrefToken(key)) {
                         a.setAttribute('data-href-token', key);
                         a.setAttribute('href', INERT_HREF);
                     } else {
