@@ -7,7 +7,7 @@ export interface PreviewPluginOptions {
     sampleData?: Record<string, string>;
 }
 
-const DEFAULT_SAMPLE_DATA: Record<string, string> = {
+export const DEFAULT_SAMPLE_DATA: Record<string, string> = {
     first_name: 'Alice',
     last_name: 'Smith',
     full_name: 'Alice Smith',
@@ -90,7 +90,8 @@ export function createPreviewPlugin(options?: PreviewPluginOptions): Plugin {
                 exitBtn.appendChild(iconSpan);
                 exitBtn.appendChild(textSpan);
                 exitBtn.addEventListener('click', exitPreview);
-                editor.container.insertBefore(exitBtn, editor.editorArea);
+                // Placed relative to editorArea, which may be wrapped (e.g. by the side preview).
+                editor.editorArea.before(exitBtn);
 
                 previewBtn.classList.add('play-editor-btn-active');
             }

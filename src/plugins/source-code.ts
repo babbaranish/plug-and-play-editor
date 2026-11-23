@@ -349,7 +349,8 @@ export const SourceCodePlugin: Plugin = {
             openedSource = source;
 
             editor.editorArea.style.display = 'none';
-            editor.container.appendChild(buildSourceView(source));
+            // In editorArea's place, which may be wrapped (e.g. by the side preview).
+            editor.editorArea.after(buildSourceView(source));
             btn.classList.add('play-editor-btn-active');
 
             // getContent()/onChange/onInput must reflect the textarea while it's

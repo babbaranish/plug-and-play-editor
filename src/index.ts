@@ -43,6 +43,33 @@ export type { ButtonBlockPluginOptions, ButtonDialogRequest } from './plugins/bu
 export { ImageResizePlugin } from './plugins/image-resize';
 export { PreviewPlugin, createPreviewPlugin } from './plugins/preview';
 export type { PreviewPluginOptions } from './plugins/preview';
+export {
+    SidePreviewPlugin,
+    createSidePreviewPlugin,
+    buildPreviewHtml,
+    SIDE_PREVIEW_TOGGLE_COMMAND
+} from './plugins/side-preview';
+export type { SidePreviewPluginOptions, SidePreviewDevice, SidePreviewMode, BuildPreviewOptions } from './plugins/side-preview';
+export {
+    AmpFormPlugin,
+    createAmpFormPlugin,
+    addAmpForm,
+    updateAmpForm,
+    AMP_FORM_INSERT_COMMAND,
+    AMP_FORM_UPDATE_COMMAND
+} from './plugins/amp-form';
+export type { AmpFormPluginOptions } from './plugins/amp-form';
+export { AMP_FORM_FONTS } from './amp/forms/formStyle';
+export { validateAmpFormConfig } from './amp/forms/formValidator';
+export { AmpFormConfigError } from './amp/forms/formConfig';
+export type {
+    AmpFormConfig,
+    AmpFormField,
+    AmpFormFieldType,
+    AmpFormSelectOption,
+    AmpFormConfigIssue,
+    AmpFormStyle
+} from './amp/forms/types';
 export { SourceCodePlugin } from './plugins/source-code';
 export { FontFamilyPlugin } from './plugins/font-family';
 export { BlockQuotePlugin } from './plugins/block-quote';
@@ -169,6 +196,9 @@ export type {
     ModalField,
     ModalFieldHint,
     ModalFieldRow,
+    ModalListField,
+    ModalListItem,
+    ModalFormEntry,
     ModalFieldType,
     ModalFieldToken,
     FormModalOptions,

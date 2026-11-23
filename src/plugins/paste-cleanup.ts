@@ -1,6 +1,7 @@
 import type { Plugin } from '../core/Plugin';
 import type { Editor } from '../core/Editor';
 import { hardenedIframe } from './media';
+import { AMP_FORM_BLOCK_ATTRS, AMP_FORM_CLASS, AMP_FORM_FIELD_ATTRS } from '../amp/forms/formConfig';
 
 /*
  * A paste is a ditto: what lands should look exactly like what was copied —
@@ -159,6 +160,10 @@ function keepAttr(el: Element, name: string, value: string): boolean {
     if (name === 'style' || name === 'class' || name === 'contenteditable') return true; // handled separately
     if (name in LAYOUT_ATTRS) return LAYOUT_ATTRS[name].test(value.trim());
     if (name === 'title' || name === 'data-token' || name === 'data-user-id') return true;
+    // An AMP form block's settings, on the block and its field elements. Kept
+    // only there, and validated before any form is generated from them.
+    if (AMP_FORM_BLOCK_ATTRS.includes(name)) return el.classList.contains(AMP_FORM_CLASS);
+    if (AMP_FORM_FIELD_ATTRS.includes(name)) return el.parentElement?.classList.contains(AMP_FORM_CLASS) ?? false;
     switch (el.tagName) {
         case 'A': return name === 'target' || name === 'rel' || name === 'data-href-token' || (name === 'href' && isSafeUrl(value, false));
         case 'IMG': return name === 'alt' || (name === 'src' && isSafeUrl(value, true));

@@ -9,6 +9,7 @@ export default defineConfig({
                 index: path.resolve(__dirname, 'src/index.ts'),
                 react: path.resolve(__dirname, 'src/react.tsx'),
                 'react-defaults': path.resolve(__dirname, 'src/react-defaults.ts'),
+                amp: path.resolve(__dirname, 'src/amp/index.ts'),
             },
             formats: ['es', 'cjs'],
             fileName: (format, entryName) => `${entryName}.${format === 'es' ? 'mjs' : 'cjs'}`,

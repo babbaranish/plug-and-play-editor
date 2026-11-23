@@ -6,7 +6,9 @@ export type ModalFieldType =
     | 'textarea'
     | 'color'
     | 'number'
-    | 'select';
+    | 'select'
+    /** Value is `'true'` when checked, `''` when not. */
+    | 'checkbox';
 
 export interface ModalFieldToken {
     key: string;
@@ -43,6 +45,50 @@ export interface ModalField {
 /** A row of fields (rendered side-by-side) or a single field. */
 export type ModalFieldRow = ModalField | ModalField[];
 
+/** One item of a {@link ModalListField}: its sub-field values by name. */
+export type ModalListItem = Record<string, string>;
+
+/**
+ * A list the user can grow and reorder: each item is a row of sub-fields,
+ * with move up / move down / remove, and an add button below. Its items are
+ * passed to `onSubmit` as `helpers.lists[name]`.
+ */
+export interface ModalListField {
+    readonly kind: 'list';
+    readonly name: string;
+    readonly label: string;
+    /** The sub-fields of every item. Their names are the keys of each {@link ModalListItem}. */
+    readonly itemFields: readonly ModalField[];
+    /** Starting items. */
+    readonly items?: readonly ModalListItem[];
+    /** Values of an item the add button creates. */
+    readonly newItem?: () => ModalListItem;
+    /** Text of the add button. Default `'Add'`. */
+    readonly addLabel?: string;
+    /** Names one item in button labels, e.g. `'field'` → "Remove field". Default `'item'`. */
+    readonly itemLabel?: string;
+    /** Items can't be removed below this. Default 0. */
+    readonly minItems?: number;
+    /** No more items can be added past this. */
+    readonly maxItems?: number;
+    /** Whether a sub-field shows for an item's current values (e.g. choices only for a dropdown). Default: always. */
+    readonly isFieldVisible?: (item: ModalListItem, fieldName: string) => boolean;
+    /**
+     * Runs when a sub-field changes, with the item before and after. Returns
+     * values to set on other sub-fields of that item, e.g. a name that
+     * follows its label.
+     */
+    readonly onItemChange?: (item: ModalListItem, changed: string, previous: ModalListItem) => Partial<ModalListItem> | void;
+    /** A message for an item, given every item (e.g. "name used twice"). Re-run on any change in the list. */
+    readonly itemHint?: (item: ModalListItem, index: number, items: readonly ModalListItem[]) => ModalFieldHint | null;
+}
+
+export type ModalFormEntry = ModalFieldRow | ModalListField;
+
+function isListField(entry: ModalFormEntry): entry is ModalListField {
+    return !Array.isArray(entry) && (entry as ModalListField).kind === 'list';
+}
+
 export interface ModalButtonTheme {
     background?: string;
     color?: string;
@@ -59,13 +105,20 @@ export interface ModalTheme {
 
 export interface FormModalOptions {
     title: string;
-    fields: ModalFieldRow[];
+    fields: ModalFormEntry[];
     submitLabel?: string;
     cancelLabel?: string;
     theme?: ModalTheme;
+    /** A wider dialog, for forms with lists. */
+    wide?: boolean;
     onSubmit: (
         values: Record<string, string>,
-        helpers: { showError: (msg: string) => void; close: () => void }
+        helpers: {
+            showError: (msg: string) => void;
+            close: () => void;
+            /** Items of each list field, by its name. */
+            lists: Record<string, ModalListItem[]>;
+        }
     ) => void;
 }
 
@@ -395,7 +448,17 @@ function renderField(
     label.appendChild(labelText);
 
     let input: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
-    if (field.type === 'textarea') {
+    if (field.type === 'checkbox') {
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.className = 'play-editor-modal-checkbox';
+        box.name = field.name;
+        box.checked = field.value === 'true';
+        if (autofocus) box.setAttribute('data-autofocus', 'true');
+        label.classList.add('play-editor-modal-label-checkbox');
+        label.insertBefore(box, labelText);
+        return { wrapper: label, input: box };
+    } else if (field.type === 'textarea') {
         const ta = document.createElement('textarea');
         ta.rows = 4;
         input = ta;
@@ -448,18 +511,197 @@ function renderField(
     return { wrapper: label, input };
 }
 
+type ModalInput = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+
+function fieldValue(el: ModalInput): string {
+    return el instanceof HTMLInputElement && el.type === 'checkbox' ? (el.checked ? 'true' : '') : el.value;
+}
+
+function setFieldValue(el: ModalInput, value: string): void {
+    if (el instanceof HTMLInputElement && el.type === 'checkbox') el.checked = value === 'true';
+    else el.value = value;
+}
+
+function listButton(text: string, label: string, onClick: () => void): HTMLButtonElement {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'play-editor-modal-list-btn';
+    b.textContent = text;
+    b.title = label;
+    b.setAttribute('aria-label', label);
+    b.addEventListener('click', (e) => {
+        e.preventDefault();
+        onClick();
+    });
+    return b;
+}
+
+interface ListRow {
+    el: HTMLDivElement;
+    inputs: Map<string, ModalInput>;
+    wrappers: Map<string, HTMLLabelElement>;
+    hint: HTMLSpanElement;
+    up: HTMLButtonElement;
+    down: HTMLButtonElement;
+    remove: HTMLButtonElement;
+}
+
+function renderList(list: ModalListField): { element: HTMLFieldSetElement; values: () => ModalListItem[] } {
+    const noun = list.itemLabel ?? 'item';
+    const min = list.minItems ?? 0;
+
+    const wrap = document.createElement('fieldset');
+    wrap.className = 'play-editor-modal-list';
+    wrap.setAttribute('data-list', list.name);
+    const legend = document.createElement('legend');
+    legend.className = 'play-editor-modal-label-text';
+    legend.textContent = list.label;
+    const itemsEl = document.createElement('div');
+    itemsEl.className = 'play-editor-modal-list-items';
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'play-editor-modal-list-add';
+    addBtn.textContent = `+ ${list.addLabel ?? 'Add'}`;
+    wrap.append(legend, itemsEl, addBtn);
+
+    const rows: ListRow[] = [];
+    const read = (row: ListRow): ModalListItem =>
+        Object.fromEntries(Array.from(row.inputs, ([name, el]) => [name, fieldValue(el)]));
+
+    const refresh = () => {
+        const all = rows.map(read);
+        rows.forEach((row, i) => {
+            const item = all[i];
+            row.wrappers.forEach((wrapper, name) => {
+                let visible = true;
+                try {
+                    visible = list.isFieldVisible ? list.isFieldVisible(item, name) : true;
+                } catch { /* show it */ }
+                wrapper.style.display = visible ? '' : 'none';
+            });
+            let hint: ModalFieldHint | null = null;
+            try {
+                hint = list.itemHint?.(item, i, all) ?? null;
+            } catch {
+                hint = null;
+            }
+            row.hint.textContent = hint?.text ?? '';
+            row.hint.className = hint?.tone ? `play-editor-modal-hint play-editor-modal-hint-${hint.tone}` : 'play-editor-modal-hint';
+            row.hint.style.display = hint?.text ? '' : 'none';
+            row.up.disabled = i === 0;
+            row.down.disabled = i === rows.length - 1;
+            row.remove.disabled = rows.length <= min;
+            row.el.setAttribute('aria-label', `${noun.charAt(0).toUpperCase()}${noun.slice(1)} ${i + 1}`);
+        });
+        addBtn.disabled = list.maxItems !== undefined && rows.length >= list.maxItems;
+    };
+
+    const move = (row: ListRow, by: -1 | 1) => {
+        const i = rows.indexOf(row);
+        const j = i + by;
+        if (i < 0 || j < 0 || j >= rows.length) return;
+        rows.splice(i, 1);
+        rows.splice(j, 0, row);
+        itemsEl.insertBefore(row.el, rows[j + 1]?.el ?? null);
+        refresh();
+        (by < 0 ? row.up : row.down).focus();
+    };
+
+    const addRow = (values: ModalListItem, focus = false) => {
+        const el = document.createElement('div');
+        el.className = 'play-editor-modal-list-item';
+        el.setAttribute('role', 'group');
+        const fieldsEl = document.createElement('div');
+        fieldsEl.className = 'play-editor-modal-list-fields';
+        const inputs = new Map<string, ModalInput>();
+        const wrappers = new Map<string, HTMLLabelElement>();
+        for (const field of list.itemFields) {
+            const { wrapper, input } = renderField({ ...field, value: values[field.name] ?? field.value }, false);
+            wrapper.setAttribute('data-field', field.name);
+            inputs.set(field.name, input);
+            wrappers.set(field.name, wrapper);
+            fieldsEl.appendChild(wrapper);
+        }
+        const hint = document.createElement('span');
+        hint.className = 'play-editor-modal-hint';
+        hint.setAttribute('aria-live', 'polite');
+
+        const row: ListRow = {
+            el, inputs, wrappers, hint,
+            up: listButton('↑', `Move ${noun} up`, () => move(row, -1)),
+            down: listButton('↓', `Move ${noun} down`, () => move(row, 1)),
+            remove: listButton('×', `Remove ${noun}`, () => {
+                const i = rows.indexOf(row);
+                if (i < 0 || rows.length <= min) return;
+                rows.splice(i, 1);
+                el.remove();
+                refresh();
+                addBtn.focus();
+            }),
+        };
+        const controls = document.createElement('div');
+        controls.className = 'play-editor-modal-list-controls';
+        controls.append(row.up, row.down, row.remove);
+        el.append(fieldsEl, controls, hint);
+
+        let previous = read(row);
+        const onChange = (e: Event) => {
+            const changed = Array.from(inputs).find(([, input]) => input === e.target)?.[0];
+            if (!changed) return;
+            let updates: Partial<ModalListItem> | void;
+            try {
+                updates = list.onItemChange?.(read(row), changed, previous);
+            } catch {
+                updates = undefined;
+            }
+            if (updates) {
+                for (const [name, value] of Object.entries(updates)) {
+                    const input = inputs.get(name);
+                    if (input && value !== undefined) setFieldValue(input, value);
+                }
+            }
+            previous = read(row);
+            refresh();
+        };
+        fieldsEl.addEventListener('input', onChange);
+        fieldsEl.addEventListener('change', onChange);
+
+        itemsEl.appendChild(el);
+        rows.push(row);
+        if (focus) inputs.values().next().value?.focus();
+    };
+
+    (list.items ?? []).forEach(item => addRow(item));
+    while (rows.length < min) addRow(list.newItem?.() ?? {});
+    addBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (list.maxItems !== undefined && rows.length >= list.maxItems) return;
+        addRow(list.newItem?.() ?? {}, true);
+        refresh();
+    });
+    refresh();
+
+    return { element: wrap, values: () => rows.map(read) };
+}
+
 export function openFormModal(editor: Editor, options: FormModalOptions): ModalHandle {
     const { backdrop, dialog, body, footer, errorBox } = buildShell(editor, options.title);
+    if (options.wide) dialog.classList.add('play-editor-modal-wide');
 
     const form = document.createElement('form');
     form.className = 'play-editor-modal-form';
     form.addEventListener('submit', (e) => e.preventDefault());
 
-    const inputs: Record<string, HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> = {};
+    const inputs: Record<string, ModalInput> = {};
+    const lists: Record<string, () => ModalListItem[]> = {};
     let autofocusAssigned = false;
 
     options.fields.forEach((row) => {
-        if (Array.isArray(row)) {
+        if (isListField(row)) {
+            const { element, values } = renderList(row);
+            lists[row.name] = values;
+            form.appendChild(element);
+        } else if (Array.isArray(row)) {
             const rowEl = document.createElement('div');
             rowEl.className = 'play-editor-modal-row';
             row.forEach((field) => {
@@ -504,10 +746,14 @@ export function openFormModal(editor: Editor, options: FormModalOptions): ModalH
     const submit = () => {
         const values: Record<string, string> = {};
         Object.entries(inputs).forEach(([name, el]) => {
-            values[name] = el.value;
+            values[name] = fieldValue(el);
+        });
+        const listValues: Record<string, ModalListItem[]> = {};
+        Object.entries(lists).forEach(([name, read]) => {
+            listValues[name] = read();
         });
         showError('');
-        options.onSubmit(values, { showError, close: handle.close });
+        options.onSubmit(values, { showError, close: handle.close, lists: listValues });
     };
 
     submitBtn.addEventListener('click', (e) => {
