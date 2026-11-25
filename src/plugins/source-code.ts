@@ -71,6 +71,7 @@ export const SourceCodePlugin: Plugin = {
         let foldStore = new Map<number, string[]>();
 
         let wrapper: HTMLDivElement | null = null;
+        let resizeObserver: ResizeObserver | null = null;
         let gutterEl: HTMLDivElement | null = null;
         let highlightEl: HTMLElement | null = null;
         let matchEl: HTMLElement | null = null;
@@ -95,6 +96,15 @@ export const SourceCodePlugin: Plugin = {
 
         function syncScroll() {
             if (!textarea || !highlightEl || !gutterEl) return;
+            // The textarea's own scrollbars take room from its visible area, so it
+            // can scroll further than the layers drawn behind it, which have none.
+            // Near the end that left the colours and line numbers up to a line away
+            // from the real text, so a keystroke landed on the line below the one
+            // shown. The layers are padded by the scrollbars' size (core.css).
+            if (wrapper) {
+                wrapper.style.setProperty('--pe-source-scrollbar-h', `${textarea.offsetHeight - textarea.clientHeight}px`);
+                wrapper.style.setProperty('--pe-source-scrollbar-w', `${textarea.offsetWidth - textarea.clientWidth}px`);
+            }
             highlightEl.scrollTop = textarea.scrollTop;
             highlightEl.scrollLeft = textarea.scrollLeft;
             if (matchEl) {
@@ -300,6 +310,9 @@ export const SourceCodePlugin: Plugin = {
                 editor.notifyContentChange();
             });
             textarea.addEventListener('scroll', syncScroll);
+            // A resize can add or remove a scrollbar without any scroll event.
+            resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => syncScroll());
+            resizeObserver?.observe(textarea);
             textarea.addEventListener('mousedown', expandAllFolds);
             textarea.addEventListener('focus', expandAllFolds);
             textarea.addEventListener('focus', updateMatch);
@@ -389,6 +402,8 @@ export const SourceCodePlugin: Plugin = {
             document.removeEventListener('selectionchange', updateMatch);
             clearMatch();
 
+            resizeObserver?.disconnect();
+            resizeObserver = null;
             wrapper?.remove();
             wrapper = null;
             gutterEl = null;

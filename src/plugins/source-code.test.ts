@@ -135,3 +135,40 @@ describe('SourceCodePlugin host notification on exit', () => {
         expect(ed.textArea.value).toBe(original);
     });
 });
+
+describe('SourceCodePlugin layer alignment', () => {
+    // The textarea's scrollbars shrink its visible area, so it can scroll further
+    // than the coloured layer and gutter behind it. They are padded by the
+    // scrollbars' size (CSS variables on the source root) so every layer scrolls
+    // as far as the textarea and keystrokes land on the line that is shown.
+    // happy-dom has no layout (sizes read 0); a real browser fills in the sizes.
+    function withScrollbars(ta: HTMLTextAreaElement, h: number, w: number) {
+        Object.defineProperty(ta, 'offsetHeight', { configurable: true, get: () => 300 + h });
+        Object.defineProperty(ta, 'clientHeight', { configurable: true, get: () => 300 });
+        Object.defineProperty(ta, 'offsetWidth', { configurable: true, get: () => 500 + w });
+        Object.defineProperty(ta, 'clientWidth', { configurable: true, get: () => 500 });
+    }
+
+    it('exposes the textarea\'s scrollbar sizes to the layers behind it', () => {
+        const ed = mount('<p>a</p>');
+        const ta = openSource(ed);
+        withScrollbars(ta, 15, 17);
+        ta.dispatchEvent(new Event('scroll'));
+        const root = ed.container.querySelector<HTMLElement>('.play-editor-source-root')!;
+        expect(root.style.getPropertyValue('--pe-source-scrollbar-h')).toBe('15px');
+        expect(root.style.getPropertyValue('--pe-source-scrollbar-w')).toBe('17px');
+    });
+
+    it('keeps the highlight, match layer and gutter on the textarea\'s scroll position', () => {
+        const ed = mount('<p>a</p>');
+        const ta = openSource(ed);
+        ta.scrollTop = 48;
+        ta.scrollLeft = 30;
+        ta.dispatchEvent(new Event('scroll'));
+        const layer = (s: string) => ed.container.querySelector<HTMLElement>(s)!;
+        expect(layer('.play-editor-source-highlight').scrollTop).toBe(ta.scrollTop);
+        expect(layer('.play-editor-source-match').scrollTop).toBe(ta.scrollTop);
+        expect(layer('.play-editor-source-gutter').scrollTop).toBe(ta.scrollTop);
+        expect(layer('.play-editor-source-highlight').scrollLeft).toBe(ta.scrollLeft);
+    });
+});

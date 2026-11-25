@@ -690,6 +690,20 @@
   pointer-events: none;
 }
 
+/* The layers behind the textarea scroll with it. The textarea's scrollbars
+   take room from it, so the layers get that much more padding (sizes set by
+   the source view as --pe-source-scrollbar-h / -w) and can scroll exactly as
+   far: the colours and line numbers stay on the line being typed in. */
+.play-editor-source-highlight,
+.play-editor-source-match {
+  padding-bottom: calc(8px + var(--pe-source-scrollbar-h, 0px));
+  padding-right: calc(12px + var(--pe-source-scrollbar-w, 0px));
+}
+
+.play-editor-source-gutter {
+  padding-bottom: calc(8px + var(--pe-source-scrollbar-h, 0px));
+}
+
 /* Matching-tag pair. The text stays transparent so the highlight shows through. */
 .pe-tag-match {
   color: transparent;
