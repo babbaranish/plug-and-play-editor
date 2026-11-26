@@ -122,7 +122,7 @@ export function formatAmpFormChoices(options: unknown): string {
 // ── Stored format ─────────────────────────────────────────────────
 
 /** `data-submit-text` → `submitText`, for reporting attributes the format doesn't have. */
-function settingName(attr: string): string {
+export function settingName(attr: string): string {
     return attr.replace(/^data-/, '').replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
 }
 
@@ -131,7 +131,7 @@ function settingName(attr: string): string {
  * an unsupported setting. The editor's own markers (`data-pe-…`, e.g. the one
  * paste clean-up adds for a moment) are not settings.
  */
-function isUnknownSetting(name: string, known: ReadonlySet<string>): boolean {
+export function isUnknownSetting(name: string, known: ReadonlySet<string>): boolean {
     return name.startsWith('data-') && !name.startsWith('data-pe-') && !known.has(name);
 }
 

@@ -33,7 +33,10 @@ import {
     WordCountPlugin,
     AmpFormPlugin,
     addAmpForm,
-    AmpFormConfigError
+    AmpFormConfigError,
+    AmpQuizPlugin,
+    addAmpQuiz,
+    AmpQuizConfigError
 } from './index';
 import { toAmpEmail } from './amp';
 import { openInfoModal } from './core/modal';
@@ -70,7 +73,8 @@ const editor = new Editor('#editor', [
     BlockQuotePlugin,
     FindReplacePlugin,
     WordCountPlugin,
-    AmpFormPlugin
+    AmpFormPlugin,
+    AmpQuizPlugin
 ]);
 
 // The AMP form JavaScript API.
@@ -92,6 +96,30 @@ document.getElementById('add-amp-form')?.addEventListener('click', () => {
         });
     } catch (err) {
         if (err instanceof AmpFormConfigError) console.error(err.issues);
+        else throw err;
+    }
+});
+
+// The AMP quiz JavaScript API.
+document.getElementById('add-amp-quiz')?.addEventListener('click', () => {
+    try {
+        addAmpQuiz(editor, {
+            questions: [
+                { question: 'What is the capital of France?', options: ['London', 'Paris', 'Berlin'], answer: 'Paris' },
+                {
+                    question: 'Which planet is known as the Red Planet?',
+                    options: ['Venus', 'Mars', 'Jupiter'],
+                    answer: 'Mars',
+                    explanation: 'Iron oxide dust on its surface makes Mars look red.',
+                },
+            ],
+            correctMessage: 'Correct!',
+            wrongMessage: 'Not quite.',
+            fallbackUrl: 'https://example.com/quiz',
+            style: { buttonColor: '#d63736', fieldRadius: 8, maxWidth: 480 },
+        });
+    } catch (err) {
+        if (err instanceof AmpQuizConfigError) console.error(err.issues);
         else throw err;
     }
 });

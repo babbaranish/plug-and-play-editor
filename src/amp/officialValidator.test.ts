@@ -17,6 +17,8 @@ import type { AmpFormConfig } from './forms/types';
 import { generateButtonHtmlForTest } from '../plugins/button-block';
 import { Editor } from '../core/Editor';
 import { AmpFormPlugin, addAmpForm } from '../plugins/amp-form';
+import { renderAmpQuizBlock } from './quiz/quizRenderer';
+import type { AmpQuizConfig } from './quiz/types';
 
 interface ValidationResult {
     status: 'PASS' | 'FAIL';
@@ -64,7 +66,30 @@ const button = generateButtonHtmlForTest({
     textColor: '#ffffff', bgColor: '#d63736', borderRadius: 4, hrefToken: 'pay_link',
 } as Parameters<typeof generateButtonHtmlForTest>[0]);
 
+const quiz: AmpQuizConfig = {
+    questions: [
+        { question: 'What is the capital of France?', options: ['London', 'Paris', 'Berlin'], answer: 'Paris' },
+        { question: "It's \"quoted\" & <odd>", options: ['Yes, always', "Don't know"], answer: "Don't know", explanation: 'Because.' },
+    ],
+};
+
 const CASES: Record<string, string> = {
+    'a quiz': renderAmpQuizBlock(quiz, document).outerHTML,
+    'a quiz that records answers, with every design setting': renderAmpQuizBlock({
+        ...quiz,
+        columns: 3,
+        action: 'https://example.com/api/quiz',
+        fallbackUrl: 'https://example.com/quiz',
+        style: {
+            buttonColor: '#d63736', buttonRadius: 20, buttonFullWidth: true, buttonAlign: 'center',
+            fieldBorderColor: '#999999', fieldBackground: '#fafafa', fieldRadius: 8, fieldTextSize: 17,
+            labelColor: '#333333', labelBold: false, successColor: '#006600', errorColor: '#990000',
+            fieldSpacing: 20, maxWidth: 480, fontFamily: 'Georgia',
+        },
+    }, document).outerHTML,
+    'two quizzes and a form': renderAmpQuizBlock(quiz, document).outerHTML +
+        renderAmpFormBlock(subscribe, document).outerHTML +
+        renderAmpQuizBlock({ questions: [{ question: 'Q', options: ['A', 'B'], answer: 'B' }], columns: 2 }, document).outerHTML,
     'the proposed subscribe form': renderAmpFormBlock(subscribe, document).outerHTML,
     'every field type': renderAmpFormBlock(everyField, document).outerHTML,
     'two forms': renderAmpFormBlock(subscribe, document).outerHTML + renderAmpFormBlock(everyField, document).outerHTML,

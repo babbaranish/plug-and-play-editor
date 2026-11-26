@@ -26,6 +26,13 @@ export const FORM_TAGS: ReadonlySet<string> = new Set([
     'FORM', 'INPUT', 'SELECT', 'OPTION', 'TEXTAREA', 'BUTTON', 'LABEL', 'FIELDSET', 'LEGEND',
 ]);
 
+/**
+ * Elements only generated markup uses (a quiz's choices). Not in
+ * {@link ALLOWED_TAGS}, so the clean-up pass unwraps any written in content;
+ * validation accepts them in the output.
+ */
+export const GENERATED_TAGS: ReadonlySet<string> = new Set(['AMP-SELECTOR']);
+
 /** Elements removed with their content: they can run code, embed other documents or don't work in email. */
 export const DROPPED_TAGS: ReadonlySet<string> = new Set([
     'SCRIPT', 'NOSCRIPT', 'STYLE', 'TEMPLATE', 'LINK', 'META', 'BASE', 'TITLE',
@@ -72,6 +79,28 @@ const TAG_ATTRS: Readonly<Record<string, Readonly<Record<string, RegExp | null>>
     // A form's state containers.
     DIV: { submitting: /^$/, 'submit-success': /^$/, 'submit-error': /^$/ },
 };
+
+/**
+ * Attributes only generated markup uses: a quiz's amp-selector, its choices
+ * and what starts hidden. Like {@link GENERATED_TAGS}, the clean-up pass
+ * removes them from content (it checks {@link isAllowedAttribute} only), and
+ * validation accepts them in the output. The quiz's amp-bind bindings use the
+ * `data-amp-bind-…` spelling, which the DOM can create (`[hidden]` it can't);
+ * the clean-up pass removes every `data-` attribute from content.
+ */
+const GENERATED_GLOBAL_ATTRS: Readonly<Record<string, RegExp | null>> = { hidden: /^$/ };
+const GENERATED_TAG_ATTRS: Readonly<Record<string, Readonly<Record<string, RegExp | null>>>> = {
+    'AMP-SELECTOR': { layout: /^container$/, name: null, disabled: /^$/, on: /^select:AMP\.setState\(/ },
+    DIV: { option: null },
+};
+
+export function isGeneratedAttribute(tag: string, name: string, value: string): boolean {
+    // `null` means any value, so look the name up with `in`, not `??`.
+    const forTag = GENERATED_TAG_ATTRS[tag];
+    const rule = forTag && name in forTag ? forTag[name] : GENERATED_GLOBAL_ATTRS[name];
+    if (rule === undefined) return false;
+    return rule === null || rule.test(value.trim());
+}
 
 /** Field names AMP reserves (e.g. `__amp_source_origin`). */
 const RESERVED_FIELD_NAME = /^__amp/i;
@@ -186,14 +215,14 @@ export function validateAmp(root: ParentNode, ctx: AmpContext): void {
     for (const el of Array.from(root.querySelectorAll('*'))) {
         const tag = el.tagName;
         const inForm = FORM_TAGS.has(tag) && el.closest('form') !== null;
-        if (!ALLOWED_TAGS.has(tag) && !inForm) {
+        if (!ALLOWED_TAGS.has(tag) && !GENERATED_TAGS.has(tag) && !inForm) {
             ctx.report('error', 'invalid-element', FORM_TAGS.has(tag)
                 ? `<${tag.toLowerCase()}> is only allowed inside a form.`
                 : `<${tag.toLowerCase()}> is not allowed in AMP email.`, el);
             continue;
         }
         for (const attr of Array.from(el.attributes)) {
-            if (!isAllowedAttribute(tag, attr.name, attr.value)) {
+            if (!isAllowedAttribute(tag, attr.name, attr.value) && !isGeneratedAttribute(tag, attr.name, attr.value)) {
                 ctx.report('error', 'invalid-attribute', `Attribute ${attr.name}="${attr.value}" is not allowed on <${tag.toLowerCase()}>.`, el);
             }
         }

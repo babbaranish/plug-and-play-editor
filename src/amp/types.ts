@@ -28,6 +28,7 @@ export type AmpIssueCode =
     | 'image-invalid-src'
     | 'invalid-accordion'
     | 'form-invalid'
+    | 'quiz-invalid'
     | 'css-important'
     | 'css-unsafe'
     | 'css-too-large';

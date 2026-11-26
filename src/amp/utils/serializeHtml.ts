@@ -1,19 +1,29 @@
 interface AmpExtension {
     readonly name: string;
     readonly version: string;
-    /** What in the content needs it. */
-    readonly selector: string;
+    /** Whether the content needs it. */
+    readonly usedBy: (root: ParentNode) => boolean;
+}
+
+const has = (selector: string) => (root: ParentNode) => root.querySelector(selector) !== null;
+
+/** An amp-bind binding (`data-amp-bind-hidden="…"` or `[hidden]="…"`) or action (`on="…"`) anywhere in `root`. */
+function usesBind(root: ParentNode): boolean {
+    return Array.from(root.querySelectorAll('*')).some(el =>
+        el.hasAttribute('on') || Array.from(el.attributes).some(a => a.name.startsWith('[') || a.name.startsWith('data-amp-bind-')));
 }
 
 /** AMP extensions the converter can emit. `amp-img` is built in and needs none. */
 export const AMP_EXTENSIONS: readonly AmpExtension[] = [
-    { name: 'amp-accordion', version: '0.1', selector: 'amp-accordion' },
-    { name: 'amp-form', version: '0.1', selector: 'form' },
+    { name: 'amp-accordion', version: '0.1', usedBy: has('amp-accordion') },
+    { name: 'amp-bind', version: '0.1', usedBy: usesBind },
+    { name: 'amp-form', version: '0.1', usedBy: has('form') },
+    { name: 'amp-selector', version: '0.1', usedBy: has('amp-selector') },
 ];
 
 /** The extensions `root` uses, in a stable order. */
 export function findExtensions(root: ParentNode): string[] {
-    return AMP_EXTENSIONS.filter(ext => root.querySelector(ext.selector) !== null).map(ext => ext.name).sort();
+    return AMP_EXTENSIONS.filter(ext => ext.usedBy(root)).map(ext => ext.name).sort();
 }
 
 function bodyHtml(root: DocumentFragment): string {

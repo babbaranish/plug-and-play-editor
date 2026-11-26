@@ -5,6 +5,8 @@ import { icons } from '../core/icons';
 import { DEFAULT_SAMPLE_DATA } from './preview';
 import { AMP_FORM_CLASS, readAmpFormConfig } from '../amp/forms/formConfig';
 import { renderAmpForm } from '../amp/forms/formRenderer';
+import { AMP_QUIZ_CLASS, readAmpQuizConfig } from '../amp/quiz/quizConfig';
+import { renderAmpQuiz } from '../amp/quiz/quizRenderer';
 
 export type SidePreviewDevice = 'desktop' | 'mobile';
 /** Which version of the email the preview shows: for AMP email apps, or for the rest. */
@@ -93,7 +95,10 @@ export function buildPreviewHtml(
 
     // Before variables are filled in, so the stored JSON is read as written;
     // the form's text is filled in with the rest below.
-    if (options.version === 'amp') drawAmpForms(root);
+    if (options.version === 'amp') {
+        drawAmpForms(root);
+        drawAmpQuizzes(root);
+    }
 
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -141,6 +146,78 @@ function drawAmpForms(root: DocumentFragment): void {
         form.setAttribute('style', own ? `margin: 1em 0; ${own}` : 'margin: 1em 0');
         block.replaceWith(form);
     });
+}
+
+/**
+ * Draws each AMP quiz block as its quiz, the way AMP email apps show it.
+ * The preview runs no AMP, so the amp-bind markup is replaced by the
+ * `data-pe-*` markers {@link playQuizClick} acts on: picking a choice in the
+ * preview behaves as it will in the email. Answers are never sent.
+ */
+function drawAmpQuizzes(root: DocumentFragment): void {
+    let index = 0;
+    root.querySelectorAll(`.${AMP_QUIZ_CLASS}`).forEach((block) => {
+        index++;
+        const read = readAmpQuizConfig(block);
+        if ('issues' in read) return;
+        const quiz = renderAmpQuiz(read.config, document, index, { preview: true });
+        quiz.querySelectorAll('[submitting], [submit-success], [submit-error], input[type="hidden"]').forEach(el => el.remove());
+        quiz.removeAttribute('action-xhr');
+        quiz.querySelectorAll('amp-selector').forEach((selector) => {
+            const div = document.createElement('div');
+            // Keeps the grid of a quiz with several choices per row.
+            const style = selector.getAttribute('style');
+            if (style) div.setAttribute('style', style);
+            div.append(...Array.from(selector.childNodes));
+            selector.replaceWith(div);
+        });
+        for (const el of [quiz, ...Array.from(quiz.querySelectorAll('*'))]) {
+            for (const attr of Array.from(el.attributes)) {
+                if (attr.name.startsWith('data-amp-bind-') || attr.name === 'on') el.removeAttribute(attr.name);
+            }
+        }
+        const own = quiz.getAttribute('style');
+        quiz.setAttribute('style', own ? `margin: 1em 0; ${own}` : 'margin: 1em 0');
+        block.replaceWith(quiz);
+    });
+}
+
+/** How AMP outlines a picked choice. */
+const PICKED_OUTLINE = '1px solid rgba(0, 0, 0, 0.7)';
+
+/**
+ * Acts out a click on a drawn quiz in the preview, as amp-bind does in the
+ * email: the first pick locks the question and shows its marks and feedback;
+ * once every question is answered, the score shows and submit is enabled.
+ */
+export function playQuizClick(target: Element): void {
+    const option = target.closest('[data-pe-option]');
+    const question = option?.closest('[data-pe-question]');
+    const quiz = question?.closest('[data-pe-quiz]');
+    if (!option || !question || !quiz || question.hasAttribute('data-pe-chosen')) return;
+    question.setAttribute('data-pe-chosen', option.getAttribute('data-pe-option') ?? '');
+    (option as HTMLElement).style.outline = PICKED_OUTLINE;
+
+    let score = 0;
+    let done = true;
+    quiz.querySelectorAll('[data-pe-question]').forEach((q) => {
+        const chosen = q.getAttribute('data-pe-chosen');
+        const answer = q.getAttribute('data-pe-question');
+        if (chosen === null) done = false;
+        else if (chosen === answer) score++;
+        q.querySelectorAll<HTMLElement>('[data-pe-when]').forEach((el) => {
+            const when = el.getAttribute('data-pe-when');
+            const show = chosen !== null && (
+                when === 'answered' ||
+                (when === 'correct' && chosen === answer) ||
+                (when === 'wrong' && chosen !== answer) ||
+                (when === 'chosen' && el.closest('[data-pe-option]')?.getAttribute('data-pe-option') === chosen));
+            el.hidden = !show;
+        });
+    });
+    quiz.querySelectorAll<HTMLElement>('[data-pe-when="complete"]').forEach((el) => { el.hidden = !done; });
+    quiz.querySelectorAll('[data-pe-score]').forEach((el) => { el.textContent = String(score); });
+    quiz.querySelectorAll<HTMLButtonElement>('[data-pe-enable="complete"]').forEach((el) => { el.disabled = !done; });
 }
 
 function frameDocument(extraStyles: string): string {
@@ -299,6 +376,12 @@ export function createSidePreviewPlugin(options: SidePreviewPluginOptions = {}):
             frame.addEventListener('load', () => {
                 frameReady = true;
                 lastHtml = null;
+                // The editor plays drawn quizzes; the frame itself runs no script.
+                frame.contentDocument?.addEventListener('click', (e) => {
+                    const target = e.target as Node | null;
+                    const el = target && (target.nodeType === Node.ELEMENT_NODE ? target as Element : target.parentElement);
+                    if (el) playQuizClick(el);
+                });
                 render();
             });
             frame.srcdoc = frameDocument(options.styles ?? '');

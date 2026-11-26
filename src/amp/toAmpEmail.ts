@@ -5,6 +5,7 @@ import { findExtensions, serializeHtml } from './utils/serializeHtml';
 import { validateAmp } from './validation/validateAmp';
 import { validateCss } from './validation/validateCss';
 import { transformForms } from './transformers/transformForms';
+import { transformQuizzes } from './transformers/transformQuizzes';
 import { transformButtons } from './transformers/transformButtons';
 import { transformEmbeds } from './transformers/transformEmbeds';
 import { transformImages } from './transformers/transformImages';
@@ -13,13 +14,14 @@ import { transformLinks } from './transformers/transformLinks';
 import { transformElements } from './transformers/transformElements';
 
 /**
- * Built-in passes, in order. Forms run first and mark their output final.
- * Embeds run before images (a YouTube thumbnail is an <img>), and the general
- * element pass runs last, once the block passes have read the editor's
- * classes and attributes.
+ * Built-in passes, in order. Forms and quizzes run first and mark their
+ * output final. Embeds run before images (a YouTube thumbnail is an <img>),
+ * and the general element pass runs last, once the block passes have read
+ * the editor's classes and attributes.
  */
 export const BUILT_IN_TRANSFORMERS: readonly AmpTransformer[] = [
     transformForms,
+    transformQuizzes,
     transformButtons,
     transformEmbeds,
     transformImages,
