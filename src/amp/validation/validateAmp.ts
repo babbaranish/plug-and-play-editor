@@ -92,6 +92,8 @@ const GENERATED_GLOBAL_ATTRS: Readonly<Record<string, RegExp | null>> = { hidden
 const GENERATED_TAG_ATTRS: Readonly<Record<string, Readonly<Record<string, RegExp | null>>>> = {
     'AMP-SELECTOR': { layout: /^container$/, name: null, disabled: /^$/, on: /^select:AMP\.setState\(/ },
     DIV: { option: null },
+    // A feedback form locks once sent.
+    FORM: { on: /^submit-success:AMP\.setState\(/ },
 };
 
 export function isGeneratedAttribute(tag: string, name: string, value: string): boolean {

@@ -19,6 +19,10 @@ import { Editor } from '../core/Editor';
 import { AmpFormPlugin, addAmpForm } from '../plugins/amp-form';
 import { renderAmpQuizBlock } from './quiz/quizRenderer';
 import type { AmpQuizConfig } from './quiz/types';
+import { renderAmpFeedbackBlock } from './feedback/feedbackRenderer';
+import type { AmpFeedbackConfig } from './feedback/types';
+
+const feedback: AmpFeedbackConfig = { action: 'https://example.com/api/feedback', questions: [{ question: "How was it? \"Honestly\" & <odd>" }] };
 
 interface ValidationResult {
     status: 'PASS' | 'FAIL';
@@ -74,6 +78,30 @@ const quiz: AmpQuizConfig = {
 };
 
 const CASES: Record<string, string> = {
+    'feedback with stars': renderAmpFeedbackBlock(feedback, document).outerHTML,
+    'feedback with emoji, no comment': renderAmpFeedbackBlock({ ...feedback, questions: [{ question: 'Q', scale: 'emoji' }], comment: false }, document).outerHTML,
+    'feedback with every rating style in one block, a required comment and every design setting': renderAmpFeedbackBlock({
+        ...feedback,
+        questions: [
+            { question: 'Delivery?', scale: 'emoji', name: 'delivery' },
+            { question: 'Product?', scale: 'stars', name: 'product' },
+            { question: 'Recommend us?', scale: '1-10', lowLabel: 'Not likely', highLabel: 'Very likely', name: 'recommend', required: false },
+            { question: 'Order again?', scale: 'thumbs', name: 'again' },
+            { question: 'Packaging?', scale: '1-5', lowLabel: 'Poor', highLabel: 'Great', name: 'packaging' },
+            { question: 'Price?', scale: '1-10', name: 'price' },
+        ],
+        commentRequired: true, commentPlaceholder: 'Why?',
+        fallbackUrl: 'https://example.com/feedback',
+        style: {
+            buttonColor: '#d63736', buttonRadius: 20, buttonFullWidth: true, buttonAlign: 'center',
+            fieldBorderColor: '#999999', fieldBackground: '#fafafa', fieldRadius: 8, fieldTextSize: 17,
+            labelColor: '#333333', labelBold: false, successColor: '#006600', errorColor: '#990000',
+            fieldSpacing: 20, maxWidth: 480, fontFamily: 'Verdana',
+        },
+    }, document).outerHTML,
+    'feedback with thumbs, next to a quiz and a form': renderAmpFeedbackBlock({ ...feedback, questions: [{ question: 'Q', scale: 'thumbs' }] }, document).outerHTML +
+        renderAmpQuizBlock({ questions: [{ question: 'Q', options: ['A', 'B'], answer: 'A' }] }, document).outerHTML +
+        renderAmpFormBlock(subscribe, document).outerHTML,
     'a quiz': renderAmpQuizBlock(quiz, document).outerHTML,
     'a quiz that records answers, with every design setting': renderAmpQuizBlock({
         ...quiz,

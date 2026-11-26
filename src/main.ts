@@ -36,7 +36,10 @@ import {
     AmpFormConfigError,
     AmpQuizPlugin,
     addAmpQuiz,
-    AmpQuizConfigError
+    AmpQuizConfigError,
+    AmpFeedbackPlugin,
+    addAmpFeedback,
+    AmpFeedbackConfigError
 } from './index';
 import { toAmpEmail } from './amp';
 import { openInfoModal } from './core/modal';
@@ -74,7 +77,8 @@ const editor = new Editor('#editor', [
     FindReplacePlugin,
     WordCountPlugin,
     AmpFormPlugin,
-    AmpQuizPlugin
+    AmpQuizPlugin,
+    AmpFeedbackPlugin
 ]);
 
 // The AMP form JavaScript API.
@@ -120,6 +124,26 @@ document.getElementById('add-amp-quiz')?.addEventListener('click', () => {
         });
     } catch (err) {
         if (err instanceof AmpQuizConfigError) console.error(err.issues);
+        else throw err;
+    }
+});
+
+// The AMP feedback JavaScript API.
+document.getElementById('add-amp-feedback')?.addEventListener('click', () => {
+    try {
+        addAmpFeedback(editor, {
+            action: 'https://example.com/api/feedback',
+            // Several ratings, one send button. Posted as delivery, product, recommend.
+            questions: [
+                { question: 'How was the delivery?', scale: 'emoji', name: 'delivery' },
+                { question: 'How do you rate the product?', scale: 'stars', name: 'product' },
+                { question: 'How likely are you to recommend us to a friend?', scale: '1-10', lowLabel: 'Not likely', highLabel: 'Very likely', name: 'recommend' },
+            ],
+            commentLabel: 'Anything we could do better?',
+            fallbackUrl: 'https://example.com/feedback',
+        });
+    } catch (err) {
+        if (err instanceof AmpFeedbackConfigError) console.error(err.issues);
         else throw err;
     }
 });

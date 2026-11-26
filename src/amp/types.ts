@@ -29,6 +29,7 @@ export type AmpIssueCode =
     | 'invalid-accordion'
     | 'form-invalid'
     | 'quiz-invalid'
+    | 'feedback-invalid'
     | 'css-important'
     | 'css-unsafe'
     | 'css-too-large';

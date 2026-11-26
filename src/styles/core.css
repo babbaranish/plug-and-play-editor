@@ -1275,7 +1275,8 @@
 /* What the block contains is the HTML version's fallback; the editor adds a
    summary of the form (from data-amp-form-summary) so authors see what it is. */
 .play-editor-content .play-editor-amp-form,
-.play-editor-content .play-editor-amp-quiz {
+.play-editor-content .play-editor-amp-quiz,
+.play-editor-content .play-editor-amp-feedback {
   padding: 12px 14px;
   border: 1px dashed var(--pe-accent);
   border-radius: 8px;
@@ -1286,7 +1287,8 @@
 }
 
 .play-editor-content .play-editor-amp-form:hover,
-.play-editor-content .play-editor-amp-quiz:hover {
+.play-editor-content .play-editor-amp-quiz:hover,
+.play-editor-content .play-editor-amp-feedback:hover {
   background: rgba(59, 130, 246, 0.1);
 }
 
@@ -1299,8 +1301,14 @@
   content: attr(data-amp-quiz-summary);
 }
 
+/* AMP Feedback block: the same, with its summary (data-amp-feedback-summary). */
+.play-editor-content .play-editor-amp-feedback::before {
+  content: attr(data-amp-feedback-summary);
+}
+
 .play-editor-content .play-editor-amp-form::before,
-.play-editor-content .play-editor-amp-quiz::before {
+.play-editor-content .play-editor-amp-quiz::before,
+.play-editor-content .play-editor-amp-feedback::before {
   display: block;
   margin-bottom: 8px;
   font-size: 12px;

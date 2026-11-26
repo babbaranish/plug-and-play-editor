@@ -143,13 +143,13 @@ describe('the quiz dialog', () => {
         const ed = mount('<p>x</p>');
         addAmpQuiz(ed, quiz)!.click();
         expect(modal(ed).querySelector<HTMLSelectElement>('[name="columns"]')!.value).toBe('1');
-        set(modal(ed), 'columns', '3');
+        set(modal(ed), 'columns', '2');
         save(ed);
         const block = ed.editorArea.querySelector('.play-editor-amp-quiz') as HTMLElement;
-        expect(block.getAttribute('data-columns')).toBe('3');
+        expect(block.getAttribute('data-columns')).toBe('2');
 
         block.click();
-        expect(modal(ed).querySelector<HTMLSelectElement>('[name="columns"]')!.value).toBe('3');
+        expect(modal(ed).querySelector<HTMLSelectElement>('[name="columns"]')!.value).toBe('2');
         set(modal(ed), 'columns', '1');
         save(ed);
         expect(ed.editorArea.querySelector('.play-editor-amp-quiz')!.hasAttribute('data-columns')).toBe(false);

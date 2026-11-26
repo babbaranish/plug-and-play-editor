@@ -7,6 +7,8 @@ import { AMP_FORM_CLASS, readAmpFormConfig } from '../amp/forms/formConfig';
 import { renderAmpForm } from '../amp/forms/formRenderer';
 import { AMP_QUIZ_CLASS, readAmpQuizConfig } from '../amp/quiz/quizConfig';
 import { renderAmpQuiz } from '../amp/quiz/quizRenderer';
+import { AMP_FEEDBACK_CLASS, readAmpFeedbackConfig } from '../amp/feedback/feedbackConfig';
+import { renderAmpFeedback } from '../amp/feedback/feedbackRenderer';
 
 export type SidePreviewDevice = 'desktop' | 'mobile';
 /** Which version of the email the preview shows: for AMP email apps, or for the rest. */
@@ -98,6 +100,7 @@ export function buildPreviewHtml(
     if (options.version === 'amp') {
         drawAmpForms(root);
         drawAmpQuizzes(root);
+        drawAmpFeedback(root);
     }
 
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -160,26 +163,68 @@ function drawAmpQuizzes(root: DocumentFragment): void {
         index++;
         const read = readAmpQuizConfig(block);
         if ('issues' in read) return;
-        const quiz = renderAmpQuiz(read.config, document, index, { preview: true });
-        quiz.querySelectorAll('[submitting], [submit-success], [submit-error], input[type="hidden"]').forEach(el => el.remove());
-        quiz.removeAttribute('action-xhr');
-        quiz.querySelectorAll('amp-selector').forEach((selector) => {
-            const div = document.createElement('div');
-            // Keeps the grid of a quiz with several choices per row.
-            const style = selector.getAttribute('style');
-            if (style) div.setAttribute('style', style);
-            div.append(...Array.from(selector.childNodes));
-            selector.replaceWith(div);
-        });
-        for (const el of [quiz, ...Array.from(quiz.querySelectorAll('*'))]) {
-            for (const attr of Array.from(el.attributes)) {
-                if (attr.name.startsWith('data-amp-bind-') || attr.name === 'on') el.removeAttribute(attr.name);
-            }
-        }
-        const own = quiz.getAttribute('style');
-        quiz.setAttribute('style', own ? `margin: 1em 0; ${own}` : 'margin: 1em 0');
-        block.replaceWith(quiz);
+        block.replaceWith(forPreview(renderAmpQuiz(read.config, document, index, { preview: true })));
     });
+}
+
+/** Draws each AMP feedback block as its form; {@link playFeedbackClick} acts out picking a rating. */
+function drawAmpFeedback(root: DocumentFragment): void {
+    let index = 0;
+    root.querySelectorAll(`.${AMP_FEEDBACK_CLASS}`).forEach((block) => {
+        index++;
+        const read = readAmpFeedbackConfig(block);
+        if ('issues' in read) return;
+        block.replaceWith(forPreview(renderAmpFeedback(read.config, document, index, { preview: true })));
+    });
+}
+
+/**
+ * Generated AMP markup made inert for the preview: nothing to send, no
+ * submit states (nothing would hide them), amp-selector as a plain div
+ * (keeping its layout) and no amp-bind attributes. The `data-pe-*` markers
+ * stay for the preview to act on.
+ */
+function forPreview(generated: HTMLElement): HTMLElement {
+    generated.querySelectorAll('[submitting], [submit-success], [submit-error], input[type="hidden"]').forEach(el => el.remove());
+    generated.removeAttribute('action-xhr');
+    generated.querySelectorAll('amp-selector').forEach((selector) => {
+        const div = document.createElement('div');
+        const style = selector.getAttribute('style');
+        if (style) div.setAttribute('style', style);
+        div.append(...Array.from(selector.childNodes));
+        selector.replaceWith(div);
+    });
+    for (const el of [generated, ...Array.from(generated.querySelectorAll('*'))]) {
+        for (const attr of Array.from(el.attributes)) {
+            if (attr.name.startsWith('data-amp-bind-') || attr.name === 'on') el.removeAttribute(attr.name);
+        }
+    }
+    const own = generated.getAttribute('style');
+    generated.setAttribute('style', own ? `margin: 1em 0; ${own}` : 'margin: 1em 0');
+    return generated;
+}
+
+/**
+ * Acts out a click on a drawn feedback block in the preview, as amp-bind
+ * does in the email: a rating can be changed until sent; stars fill up to
+ * the one picked, other scales outline it; the send button is enabled once
+ * every required question is rated.
+ */
+export function playFeedbackClick(target: Element): void {
+    const option = target.closest('[data-pe-rating]');
+    const question = option?.closest('[data-pe-scale]');
+    const block = question?.closest('[data-pe-feedback]');
+    if (!option || !question || !block) return;
+    const value = option.getAttribute('data-pe-rating') ?? '';
+    const stars = question.getAttribute('data-pe-scale') === 'stars';
+    question.querySelectorAll<HTMLElement>('[data-pe-rating]').forEach((el) => {
+        if (stars) el.textContent = Number(el.getAttribute('data-pe-rating')) <= Number(value) ? '★' : '☆';
+        else el.style.outline = el === option ? PICKED_OUTLINE : '';
+    });
+    question.setAttribute('data-pe-chosen', value);
+    const ready = Array.from(block.querySelectorAll('[data-pe-scale]'))
+        .every(q => q.getAttribute('data-pe-required') !== 'true' || q.hasAttribute('data-pe-chosen'));
+    block.querySelectorAll<HTMLButtonElement>('[data-pe-enable="rated"]').forEach((el) => { el.disabled = !ready; });
 }
 
 /** How AMP outlines a picked choice. */
@@ -376,11 +421,13 @@ export function createSidePreviewPlugin(options: SidePreviewPluginOptions = {}):
             frame.addEventListener('load', () => {
                 frameReady = true;
                 lastHtml = null;
-                // The editor plays drawn quizzes; the frame itself runs no script.
+                // The editor plays drawn quizzes and feedback; the frame itself runs no script.
                 frame.contentDocument?.addEventListener('click', (e) => {
                     const target = e.target as Node | null;
                     const el = target && (target.nodeType === Node.ELEMENT_NODE ? target as Element : target.parentElement);
-                    if (el) playQuizClick(el);
+                    if (!el) return;
+                    playQuizClick(el);
+                    playFeedbackClick(el);
                 });
                 render();
             });

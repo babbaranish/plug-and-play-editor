@@ -7,6 +7,15 @@ export { AMP_FORM_FONTS, validateAmpFormStyle } from './forms/formStyle';
 export { validateAmpQuizConfig } from './quiz/quizValidator';
 export { AmpQuizConfigError, parseAmpQuizConfig } from './quiz/quizConfig';
 export { renderAmpQuiz, renderAmpQuizBlock } from './quiz/quizRenderer';
+export { validateAmpFeedbackConfig } from './feedback/feedbackValidator';
+export { AmpFeedbackConfigError, parseAmpFeedbackConfig } from './feedback/feedbackConfig';
+export { renderAmpFeedback, renderAmpFeedbackBlock } from './feedback/feedbackRenderer';
+export type {
+    AmpFeedbackConfig,
+    AmpFeedbackConfigIssue,
+    AmpFeedbackScale,
+    NormalizedAmpFeedbackConfig,
+} from './feedback/types';
 export type {
     AmpQuizConfig,
     AmpQuizConfigIssue,

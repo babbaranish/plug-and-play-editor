@@ -71,6 +71,18 @@ export type { AmpQuizPluginOptions } from './plugins/amp-quiz';
 export { validateAmpQuizConfig } from './amp/quiz/quizValidator';
 export { AmpQuizConfigError } from './amp/quiz/quizConfig';
 export type { AmpQuizConfig, AmpQuizQuestion, AmpQuizConfigIssue } from './amp/quiz/types';
+export {
+    AmpFeedbackPlugin,
+    createAmpFeedbackPlugin,
+    addAmpFeedback,
+    updateAmpFeedback,
+    AMP_FEEDBACK_INSERT_COMMAND,
+    AMP_FEEDBACK_UPDATE_COMMAND
+} from './plugins/amp-feedback';
+export type { AmpFeedbackPluginOptions } from './plugins/amp-feedback';
+export { validateAmpFeedbackConfig } from './amp/feedback/feedbackValidator';
+export { AmpFeedbackConfigError } from './amp/feedback/feedbackConfig';
+export type { AmpFeedbackConfig, AmpFeedbackScale, AmpFeedbackConfigIssue } from './amp/feedback/types';
 export { AMP_FORM_FONTS } from './amp/forms/formStyle';
 export { validateAmpFormConfig } from './amp/forms/formValidator';
 export { AmpFormConfigError } from './amp/forms/formConfig';

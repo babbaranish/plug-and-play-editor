@@ -3,6 +3,22 @@ import type { Editor } from '../core/Editor';
 import { hardenedIframe } from './media';
 import { AMP_FORM_BLOCK_ATTRS, AMP_FORM_CLASS, AMP_FORM_FIELD_ATTRS } from '../amp/forms/formConfig';
 import { AMP_QUIZ_BLOCK_ATTRS, AMP_QUIZ_CLASS, AMP_QUIZ_QUESTION_ATTRS } from '../amp/quiz/quizConfig';
+import { AMP_FEEDBACK_BLOCK_ATTRS, AMP_FEEDBACK_CLASS, AMP_FEEDBACK_QUESTION_ATTRS } from '../amp/feedback/feedbackConfig';
+
+/**
+ * Settings stored by the AMP blocks (form, quiz, feedback): which attributes,
+ * on the block itself or on its direct children (form fields, quiz
+ * questions). Kept only there; each block validates them before anything is
+ * generated from them.
+ */
+const AMP_BLOCK_SETTINGS: readonly { attrs: readonly string[]; blockClass: string; on: 'block' | 'child' }[] = [
+    { attrs: AMP_FORM_BLOCK_ATTRS, blockClass: AMP_FORM_CLASS, on: 'block' },
+    { attrs: AMP_FORM_FIELD_ATTRS, blockClass: AMP_FORM_CLASS, on: 'child' },
+    { attrs: AMP_QUIZ_BLOCK_ATTRS, blockClass: AMP_QUIZ_CLASS, on: 'block' },
+    { attrs: AMP_QUIZ_QUESTION_ATTRS, blockClass: AMP_QUIZ_CLASS, on: 'child' },
+    { attrs: AMP_FEEDBACK_BLOCK_ATTRS, blockClass: AMP_FEEDBACK_CLASS, on: 'block' },
+    { attrs: AMP_FEEDBACK_QUESTION_ATTRS, blockClass: AMP_FEEDBACK_CLASS, on: 'child' },
+];
 
 /*
  * A paste is a ditto: what lands should look exactly like what was copied —
@@ -161,18 +177,11 @@ function keepAttr(el: Element, name: string, value: string): boolean {
     if (name === 'style' || name === 'class' || name === 'contenteditable') return true; // handled separately
     if (name in LAYOUT_ATTRS) return LAYOUT_ATTRS[name].test(value.trim());
     if (name === 'title' || name === 'data-token' || name === 'data-user-id') return true;
-    // An AMP form block's settings, on the block and its field elements. Kept
-    // only there, and validated before any form is generated from them.
-    // The same for an AMP quiz block and its question elements. The two
-    // share some names (data-action), so each is checked against its block.
-    const formSetting = AMP_FORM_BLOCK_ATTRS.includes(name) || AMP_FORM_FIELD_ATTRS.includes(name);
-    const quizSetting = AMP_QUIZ_BLOCK_ATTRS.includes(name) || AMP_QUIZ_QUESTION_ATTRS.includes(name);
-    if (formSetting || quizSetting) {
-        const parent = el.parentElement;
-        return (AMP_FORM_BLOCK_ATTRS.includes(name) && el.classList.contains(AMP_FORM_CLASS)) ||
-            (AMP_FORM_FIELD_ATTRS.includes(name) && !!parent?.classList.contains(AMP_FORM_CLASS)) ||
-            (AMP_QUIZ_BLOCK_ATTRS.includes(name) && el.classList.contains(AMP_QUIZ_CLASS)) ||
-            (AMP_QUIZ_QUESTION_ATTRS.includes(name) && !!parent?.classList.contains(AMP_QUIZ_CLASS));
+    // An AMP block's settings. Blocks share some names (data-action), so
+    // each is checked against its own kind of block.
+    const setting = AMP_BLOCK_SETTINGS.filter(s => s.attrs.includes(name));
+    if (setting.length) {
+        return setting.some(s => (s.on === 'block' ? el : el.parentElement)?.classList.contains(s.blockClass) ?? false);
     }
     switch (el.tagName) {
         case 'A': return name === 'target' || name === 'rel' || name === 'data-href-token' || (name === 'href' && isSafeUrl(value, false));
