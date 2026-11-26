@@ -83,6 +83,18 @@ export type { AmpFeedbackPluginOptions } from './plugins/amp-feedback';
 export { validateAmpFeedbackConfig } from './amp/feedback/feedbackValidator';
 export { AmpFeedbackConfigError } from './amp/feedback/feedbackConfig';
 export type { AmpFeedbackConfig, AmpFeedbackScale, AmpFeedbackConfigIssue } from './amp/feedback/types';
+export {
+    AmpPollPlugin,
+    createAmpPollPlugin,
+    addAmpPoll,
+    updateAmpPoll,
+    AMP_POLL_INSERT_COMMAND,
+    AMP_POLL_UPDATE_COMMAND
+} from './plugins/amp-poll';
+export type { AmpPollPluginOptions } from './plugins/amp-poll';
+export { validateAmpPollConfig } from './amp/poll/pollValidator';
+export { AmpPollConfigError } from './amp/poll/pollConfig';
+export type { AmpPollConfig, AmpPollConfigIssue } from './amp/poll/types';
 export { AMP_FORM_FONTS } from './amp/forms/formStyle';
 export { validateAmpFormConfig } from './amp/forms/formValidator';
 export { AmpFormConfigError } from './amp/forms/formConfig';

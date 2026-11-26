@@ -21,6 +21,10 @@ import { renderAmpQuizBlock } from './quiz/quizRenderer';
 import type { AmpQuizConfig } from './quiz/types';
 import { renderAmpFeedbackBlock } from './feedback/feedbackRenderer';
 import type { AmpFeedbackConfig } from './feedback/types';
+import { renderAmpPollBlock } from './poll/pollRenderer';
+import type { AmpPollConfig } from './poll/types';
+
+const poll: AmpPollConfig = { action: 'https://example.com/api/poll', question: 'Which day? "Honestly" & <odd>', options: ['Monday', "Friday, after lunch", "Don't mind"] };
 
 const feedback: AmpFeedbackConfig = { action: 'https://example.com/api/feedback', questions: [{ question: "How was it? \"Honestly\" & <odd>" }] };
 
@@ -78,6 +82,18 @@ const quiz: AmpQuizConfig = {
 };
 
 const CASES: Record<string, string> = {
+    'a poll': renderAmpPollBlock(poll, document).outerHTML,
+    'a poll without results, six choices, a web poll and every design setting': renderAmpPollBlock({
+        ...poll, options: ['A', 'B', 'C', 'D', 'E', 'F'], showResults: false, fallbackUrl: 'https://example.com/poll?src=email',
+        style: {
+            buttonColor: '#d63736', buttonRadius: 20, buttonFullWidth: true, buttonAlign: 'center',
+            fieldBorderColor: '#999999', fieldBackground: '#fafafa', fieldRadius: 8, fieldTextSize: 17,
+            labelColor: '#333333', labelBold: false, successColor: '#006600', errorColor: '#990000',
+            fieldSpacing: 20, maxWidth: 480, fontFamily: 'Georgia',
+        },
+    }, document).outerHTML,
+    'two polls next to feedback': renderAmpPollBlock(poll, document).outerHTML + renderAmpPollBlock(poll, document).outerHTML +
+        renderAmpFeedbackBlock(feedback, document).outerHTML,
     'feedback with stars': renderAmpFeedbackBlock(feedback, document).outerHTML,
     'feedback with emoji, no comment': renderAmpFeedbackBlock({ ...feedback, questions: [{ question: 'Q', scale: 'emoji' }], comment: false }, document).outerHTML,
     'feedback with every rating style in one block, a required comment and every design setting': renderAmpFeedbackBlock({

@@ -10,6 +10,10 @@ export { renderAmpQuiz, renderAmpQuizBlock } from './quiz/quizRenderer';
 export { validateAmpFeedbackConfig } from './feedback/feedbackValidator';
 export { AmpFeedbackConfigError, parseAmpFeedbackConfig } from './feedback/feedbackConfig';
 export { renderAmpFeedback, renderAmpFeedbackBlock } from './feedback/feedbackRenderer';
+export { validateAmpPollConfig } from './poll/pollValidator';
+export { AmpPollConfigError, parseAmpPollConfig } from './poll/pollConfig';
+export { renderAmpPoll, renderAmpPollBlock } from './poll/pollRenderer';
+export type { AmpPollConfig, AmpPollConfigIssue, NormalizedAmpPollConfig } from './poll/types';
 export type {
     AmpFeedbackConfig,
     AmpFeedbackConfigIssue,

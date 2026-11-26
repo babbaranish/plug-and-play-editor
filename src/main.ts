@@ -39,7 +39,10 @@ import {
     AmpQuizConfigError,
     AmpFeedbackPlugin,
     addAmpFeedback,
-    AmpFeedbackConfigError
+    AmpFeedbackConfigError,
+    AmpPollPlugin,
+    addAmpPoll,
+    AmpPollConfigError
 } from './index';
 import { toAmpEmail } from './amp';
 import { openInfoModal } from './core/modal';
@@ -78,7 +81,8 @@ const editor = new Editor('#editor', [
     WordCountPlugin,
     AmpFormPlugin,
     AmpQuizPlugin,
-    AmpFeedbackPlugin
+    AmpFeedbackPlugin,
+    AmpPollPlugin
 ]);
 
 // The AMP form JavaScript API.
@@ -144,6 +148,23 @@ document.getElementById('add-amp-feedback')?.addEventListener('click', () => {
         });
     } catch (err) {
         if (err instanceof AmpFeedbackConfigError) console.error(err.issues);
+        else throw err;
+    }
+});
+
+// The AMP poll JavaScript API.
+document.getElementById('add-amp-poll')?.addEventListener('click', () => {
+    try {
+        addAmpPoll(editor, {
+            // Answers {"results": [..]} (one percentage per choice) to show the results.
+            action: 'https://example.com/api/poll',
+            question: 'Which day suits you for the webinar?',
+            options: ['Monday', 'Wednesday', 'Friday'],
+            // Recipients without AMP vote by link: https://example.com/poll?choice=Monday
+            fallbackUrl: 'https://example.com/poll',
+        });
+    } catch (err) {
+        if (err instanceof AmpPollConfigError) console.error(err.issues);
         else throw err;
     }
 });

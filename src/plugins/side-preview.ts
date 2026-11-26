@@ -9,6 +9,8 @@ import { AMP_QUIZ_CLASS, readAmpQuizConfig } from '../amp/quiz/quizConfig';
 import { renderAmpQuiz } from '../amp/quiz/quizRenderer';
 import { AMP_FEEDBACK_CLASS, readAmpFeedbackConfig } from '../amp/feedback/feedbackConfig';
 import { renderAmpFeedback } from '../amp/feedback/feedbackRenderer';
+import { AMP_POLL_CLASS, readAmpPollConfig } from '../amp/poll/pollConfig';
+import { renderAmpPoll } from '../amp/poll/pollRenderer';
 
 export type SidePreviewDevice = 'desktop' | 'mobile';
 /** Which version of the email the preview shows: for AMP email apps, or for the rest. */
@@ -57,6 +59,8 @@ body {
 }
 img { max-width: 100%; }
 table { border-collapse: collapse; }
+/* As in AMP's own stylesheet: hidden wins over an inline display (a poll's bar segments). */
+[hidden] { display: none !important; }
 `;
 
 const PLACEHOLDER = /\{\{\s*([^{}]+?)\s*\}\}/g;
@@ -101,6 +105,7 @@ export function buildPreviewHtml(
         drawAmpForms(root);
         drawAmpQuizzes(root);
         drawAmpFeedback(root);
+        drawAmpPolls(root);
     }
 
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -176,6 +181,62 @@ function drawAmpFeedback(root: DocumentFragment): void {
         if ('issues' in read) return;
         block.replaceWith(forPreview(renderAmpFeedback(read.config, document, index, { preview: true })));
     });
+}
+
+/** Draws each AMP poll as its form; {@link playPollClick} acts out picking and voting. */
+function drawAmpPolls(root: DocumentFragment): void {
+    let index = 0;
+    root.querySelectorAll(`.${AMP_POLL_CLASS}`).forEach((block) => {
+        index++;
+        const read = readAmpPollConfig(block);
+        if ('issues' in read) return;
+        block.replaceWith(forPreview(renderAmpPoll(read.config, document, index, { preview: true })));
+    });
+}
+
+/**
+ * Sample percentages for the preview's results: the picked choice leads,
+ * the rest share what is left. They add up to 100.
+ */
+export function samplePollResults(count: number, picked: number): number[] {
+    const lead = count === 2 ? 60 : 40;
+    const share = Math.floor((100 - lead) / (count - 1));
+    const results = Array.from({ length: count }, (_, i) => (i === picked ? lead : share));
+    results[picked === 0 ? 1 : 0] += 100 - results.reduce((a, b) => a + b, 0);
+    return results;
+}
+
+/**
+ * Acts out a click on a drawn poll in the preview, as amp-bind does in the
+ * email: picking a choice outlines it and enables Vote; Vote shows the
+ * results the way they look once the endpoint answers, with sample numbers
+ * (nothing is sent), locks the choices and hides the button.
+ */
+export function playPollClick(target: Element): void {
+    const poll = target.closest('[data-pe-poll]');
+    if (!poll || poll.hasAttribute('data-pe-voted')) return;
+    const choice = target.closest<HTMLElement>('[data-pe-choice]');
+    if (choice) {
+        poll.querySelectorAll<HTMLElement>('[data-pe-choice]').forEach((el) => { el.style.outline = el === choice ? PICKED_OUTLINE : ''; });
+        poll.setAttribute('data-pe-chosen', choice.getAttribute('data-pe-choice') ?? '');
+        poll.querySelectorAll<HTMLButtonElement>('[data-pe-vote]').forEach((el) => { el.disabled = false; });
+        return;
+    }
+    if (!target.closest('[data-pe-vote]') || !poll.hasAttribute('data-pe-chosen')) return;
+    poll.setAttribute('data-pe-voted', '');
+    const count = poll.querySelectorAll('[data-pe-choice]').length;
+    const results = samplePollResults(count, Number(poll.getAttribute('data-pe-chosen')));
+    poll.querySelectorAll('[data-pe-percent]').forEach((el) => { el.textContent = `${results[Number(el.getAttribute('data-pe-percent'))]}%`; });
+    poll.querySelectorAll<HTMLElement>('[data-pe-bar]').forEach((bar) => {
+        const value = results[Number(bar.getAttribute('data-pe-bar'))];
+        bar.hidden = false;
+        bar.querySelectorAll<HTMLElement>('[data-pe-segment]').forEach((seg) => { seg.hidden = value < Number(seg.getAttribute('data-pe-segment')); });
+    });
+    poll.querySelectorAll<HTMLElement>('[data-pe-vote-wrap]').forEach((el) => { el.hidden = true; });
+    const note = poll.ownerDocument.createElement('p');
+    note.setAttribute('style', 'margin: 8px 0 0; font-size: 12px; color: #64748b');
+    note.textContent = 'Preview: sample results. In the email, they come from your endpoint.';
+    poll.appendChild(note);
 }
 
 /**
@@ -428,6 +489,7 @@ export function createSidePreviewPlugin(options: SidePreviewPluginOptions = {}):
                     if (!el) return;
                     playQuizClick(el);
                     playFeedbackClick(el);
+                    playPollClick(el);
                 });
                 render();
             });

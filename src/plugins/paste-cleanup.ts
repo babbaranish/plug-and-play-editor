@@ -4,6 +4,7 @@ import { hardenedIframe } from './media';
 import { AMP_FORM_BLOCK_ATTRS, AMP_FORM_CLASS, AMP_FORM_FIELD_ATTRS } from '../amp/forms/formConfig';
 import { AMP_QUIZ_BLOCK_ATTRS, AMP_QUIZ_CLASS, AMP_QUIZ_QUESTION_ATTRS } from '../amp/quiz/quizConfig';
 import { AMP_FEEDBACK_BLOCK_ATTRS, AMP_FEEDBACK_CLASS, AMP_FEEDBACK_QUESTION_ATTRS } from '../amp/feedback/feedbackConfig';
+import { AMP_POLL_BLOCK_ATTRS, AMP_POLL_CLASS } from '../amp/poll/pollConfig';
 
 /**
  * Settings stored by the AMP blocks (form, quiz, feedback): which attributes,
@@ -18,6 +19,7 @@ const AMP_BLOCK_SETTINGS: readonly { attrs: readonly string[]; blockClass: strin
     { attrs: AMP_QUIZ_QUESTION_ATTRS, blockClass: AMP_QUIZ_CLASS, on: 'child' },
     { attrs: AMP_FEEDBACK_BLOCK_ATTRS, blockClass: AMP_FEEDBACK_CLASS, on: 'block' },
     { attrs: AMP_FEEDBACK_QUESTION_ATTRS, blockClass: AMP_FEEDBACK_CLASS, on: 'child' },
+    { attrs: AMP_POLL_BLOCK_ATTRS, blockClass: AMP_POLL_CLASS, on: 'block' },
 ];
 
 /*
