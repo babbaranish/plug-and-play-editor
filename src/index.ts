@@ -22,6 +22,7 @@ export { PageBreakPlugin } from './plugins/page-break';
 export { TocPlugin } from './plugins/toc';
 export { PasteImagePlugin } from './plugins/paste-image';
 export { DragDropImagePlugin } from './plugins/drag-drop-image';
+export { BlockReorderPlugin, BLOCK_MOVE_UP_COMMAND, BLOCK_MOVE_DOWN_COMMAND } from './plugins/block-reorder';
 export { MentionsPlugin, createMentionsPlugin } from './plugins/mentions';
 export type { MentionsPluginOptions } from './plugins/mentions';
 export { CodeBlockPlugin } from './plugins/code-block';

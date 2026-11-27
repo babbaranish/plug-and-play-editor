@@ -28,7 +28,7 @@ A modern, extensible rich text editor component for the web. Use it with vanilla
 | **Code** | Inline code, Code blocks (dark theme), HTML source view toggle |
 | **Mentions** | `@mention` dropdown with keyboard navigation, configurable user list, debounced async search |
 | **Emoji** | Tabbed emoji picker (Smileys, Gestures, Hearts, Objects, Arrows) |
-| **Structure** | Accordion, Page break, Horizontal rule, Table of Contents |
+| **Structure** | Accordion, Page break, Horizontal rule, Table of Contents, drag any block to rearrange it (Alt+Shift+↑ / ↓ from the keyboard) |
 | **Date/Time** | Insert formatted date or time badges |
 | **Template Variables** | Insertable `{{token}}` placeholders for email templates, searchable picker, grouped by category, configurable delimiters |
 | **Font Size** | Dropdown with 12 preset sizes (10px–48px), applies as inline styles for email compatibility |
@@ -134,6 +134,7 @@ import {
   TocPlugin,
   PasteImagePlugin,
   DragDropImagePlugin,
+  BlockReorderPlugin,
   MentionsPlugin,
   CodeBlockPlugin,
   DateTimePlugin,
@@ -167,6 +168,7 @@ const editor = new Editor('#my-textarea', [
   TocPlugin,
   PasteImagePlugin,
   DragDropImagePlugin,
+  BlockReorderPlugin,
   MentionsPlugin,
   CodeBlockPlugin,
   DateTimePlugin,
@@ -329,6 +331,7 @@ Two optional field settings help with variables:
 | **TOC** | `TocPlugin` | Auto-generated Table of Contents from headings |
 | **Paste Image** | `PasteImagePlugin` | Cmd+V / Ctrl+V paste images from clipboard |
 | **Drag & Drop Image** | `DragDropImagePlugin` | Drag image files from the OS onto the editor to insert them, 10 MB limit |
+| **Block Reorder** | `BlockReorderPlugin` | Drag the grip beside any block (paragraph, heading, list, table, image, button, AMP block) to move it; Alt+Shift+↑ / ↓ moves the block holding the cursor |
 | **Mentions** | `MentionsPlugin` | `@mention` dropdown (uses default empty user list) |
 | **Code Block** | `CodeBlockPlugin` | Inline code, fenced code blocks, HTML source toggle |
 | **Date/Time** | `DateTimePlugin` | Insert current date or time as styled badge |

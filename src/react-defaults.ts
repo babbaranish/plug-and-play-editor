@@ -12,6 +12,7 @@ import { PageBreakPlugin } from './plugins/page-break';
 import { TocPlugin } from './plugins/toc';
 import { PasteImagePlugin } from './plugins/paste-image';
 import { DragDropImagePlugin } from './plugins/drag-drop-image';
+import { BlockReorderPlugin } from './plugins/block-reorder';
 import { MentionsPlugin } from './plugins/mentions';
 import { CodeBlockPlugin } from './plugins/code-block';
 import { DateTimePlugin } from './plugins/datetime';
@@ -45,6 +46,7 @@ export const ALL_PLUGINS: Plugin[] = [
     TocPlugin,
     PasteImagePlugin,
     DragDropImagePlugin,
+    BlockReorderPlugin,
     MentionsPlugin,
     CodeBlockPlugin,
     DateTimePlugin,

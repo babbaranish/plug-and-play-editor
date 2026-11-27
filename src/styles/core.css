@@ -1325,6 +1325,71 @@
   color: var(--pe-accent);
 }
 
+/* ── Block Reorder ────────────────────────────────────────────── */
+/* A grip in the left margin beside the hovered block; drag it to move the
+   block. The grip, drop line and highlight sit outside the content. */
+.play-editor-has-block-handle {
+  position: relative;
+}
+
+.play-editor-block-handle {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 22px;
+  border-radius: 4px;
+  color: var(--pe-text-muted);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.play-editor-block-handle:hover {
+  background: var(--pe-btn-hover);
+  color: var(--pe-text);
+}
+
+.play-editor-block-handle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.play-editor-drop-indicator {
+  position: absolute;
+  z-index: 5;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--pe-accent);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+  pointer-events: none;
+}
+
+/* The block being moved. */
+.play-editor-block-ghost {
+  position: absolute;
+  z-index: 4;
+  border: 2px dashed rgba(59, 130, 246, 0.55);
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.06);
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.play-editor-block-handle[hidden],
+.play-editor-drop-indicator[hidden],
+.play-editor-block-ghost[hidden] {
+  display: none;
+}
+
+.play-editor-block-moving,
+.play-editor-block-moving * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
 /* ── Side Preview ─────────────────────────────────────────────── */
 .play-editor-split {
   display: flex;
